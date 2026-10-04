@@ -1,0 +1,45 @@
+name: Build Windows VST3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows-vst3:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build Release
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      - name: Locate and package VST3
+        id: locate
+        shell: pwsh
+        run: |
+          $plugin = Get-ChildItem -Path "build" -Recurse -Directory -Filter "Jerzy Mono Analog Grid.vst3" | Select-Object -First 1
+          if (-not $plugin) { throw "Nie znaleziono Jerzy Mono Analog Grid.vst3" }
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item -Recurse -Force $plugin.FullName "artifact/Jerzy Mono Analog Grid.vst3"
+          Compress-Archive -Path "artifact/Jerzy Mono Analog Grid.vst3" -DestinationPath "Jerzy-Mono-Analog-Grid-Windows-x64.zip" -Force
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jerzy-Mono-Analog-Grid-Windows-VST3
+          path: |
+            artifact/Jerzy Mono Analog Grid.vst3
+            Jerzy-Mono-Analog-Grid-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 90
