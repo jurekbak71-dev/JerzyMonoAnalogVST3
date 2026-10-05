@@ -88,3 +88,23 @@ Design references:
 Suggested next extension: a selectable multimode filter (12/24 dB LP, HP, BP)
 plus independent modulation-envelope routing to pitch/PWM. The current release
 concentrates on making the existing ladder, oscillator mixer and two ADSRs reliable.
+
+## 0.4.0 — multimode filter and modulation envelope destinations
+
+`FILTER MODE` offers the existing **Ladder 24 dB** plus **LP/HP/BP 12 dB**
+and **LP/HP/BP 24 dB**. The six new responses use trapezoidal state-variable
+sections with asymmetric pre-filter drive. The four-pole LP/HP responses use
+Butterworth section damping at minimum resonance. A 24 dB BP uses two bandpass
+sections: its slopes are 12 dB/oct on each side; a 12 dB BP has 6 dB/oct per side.
+All states keep running and mode changes crossfade over approximately 3 ms
+(time constant; settling takes several time constants).
+
+The second ADSR is now labelled `MOD ENV`. `ENV > PITCH` independently applies
+-24…+24 semitones to both VCOs (sub follows OSC1). `ENV > PWM` applies -100…+100%
+modulation depth to both pulse widths. It sums with manual PW and LFO PWM and
+is clamped to 5…95% duty cycle. PWM is audible on Square/Pulse waveforms.
+The existing bipolar `ENV AMOUNT` continues routing this ADSR to filter cutoff.
+
+All three new parameters are appended after existing parameter IDs/indices.
+Old presets explicitly restore Ladder 24 dB with pitch/PWM depths at zero.
+The Ladder 24 dB path is unchanged when the new destinations are zero.

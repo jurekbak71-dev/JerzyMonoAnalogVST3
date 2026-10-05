@@ -1,5 +1,5 @@
 #pragma once
-#include <JuceHeader.h>
+#include <juce_core/juce_core.h>
 #include <array>
 #include <random>
 #include <cmath>
@@ -394,6 +394,52 @@ private:
     DCBlocker dc;
 };
 
+enum class FilterMode { ladder24, lp12, lp24, hp12, hp24, bp12, bp24 };
+
+// Trapezoidal state-variable sections. Resonance modifies damping rather than
+// adding a delayed feedback sample. The 24 dB outputs cascade two sections.
+class ClassicMultimode
+{
+    struct Outputs { double lp, hp, bp; };
+    struct Section
+    {
+        double z1 = 0.0, z2 = 0.0;
+        Outputs process(double input, double g, double k)
+        {
+            const double a1 = 1.0 / (1.0 + g * (g + k));
+            const double v3 = input - z2;
+            const double v1 = a1 * (z1 + g * v3);
+            const double v2 = z2 + g * v1;
+            z1 = 2.0 * v1 - z1; z2 = 2.0 * v2 - z2;
+            // Damping-normalised bandpass: unity at centre, narrower as Q rises.
+            return {v2, input - k * v1 - v2, k * v1};
+        }
+        void reset() { z1 = z2 = 0.0; }
+    };
+public:
+    void prepare(double fs) { sampleRate = fs; reset(); }
+    void reset() { first12.reset(); first24.reset(); low24.reset(); high24.reset(); band24.reset(); }
+    std::array<double, 6> process(double input, double cutoff, double resonance, double drive)
+    {
+        const double g = std::tan(juce::MathConstants<double>::pi * juce::jlimit(8.0, sampleRate * 0.2, cutoff) / sampleRate);
+        const double res = juce::jlimit(0.0, 1.0, resonance / 1.15);
+        const double damp = 1.0 - 0.95 * res;
+        const double gain = 1.0 + 10.0 * drive;
+        input = saturateAsymmetric(input * gain) / std::sqrt(gain);
+        const auto a = first12.process(input, g, 1.41421356237 * damp);
+        const double damp24 = std::sqrt(damp);
+        const auto b = first24.process(input, g, 1.84775906502 * damp24);
+        const double k2 = 0.76536686473 * damp24;
+        const auto lp = low24.process(b.lp, g, k2);
+        const auto hp = high24.process(b.hp, g, k2);
+        const auto bp = band24.process(b.bp, g, k2);
+        return {a.lp, lp.lp, a.hp, hp.hp, a.bp, bp.bp};
+    }
+private:
+    double sampleRate = 176400.0;
+    Section first12, first24, low24, high24, band24;
+};
+
 enum class NotePriority { last, low, high };
 enum class GlideMode { always, legatoOnly };
 
@@ -409,6 +455,8 @@ struct MonoParameters
     double mixerDrive = 0.18;
     double cutoffHz = 1800.0, resonance = 0.15, filterDrive = 0.12, filterEnvOct = 2.5, keyTrack = 0.25;
     double ampAttack = 0.005, ampDecay = 0.18, ampSustain = 0.75, ampRelease = 0.22;
+    FilterMode filterMode = FilterMode::ladder24;
+    double modEnvPitch = 0.0, modEnvPWM = 0.0;
     double filterAttack = 0.002, filterDecay = 0.22, filterSustain = 0.2, filterRelease = 0.18;
     double glideSeconds = 0.0;
     double lfoRate = 2.0, lfoPitchCents = 0.0, lfoFilterOct = 0.0, lfoPWM = 0.0;
@@ -433,6 +481,7 @@ public:
         sub.prepare(sampleRate, 0x77aa55u);
         lfo.prepare(sampleRate, 0x818181u);
         filter.prepare(sampleRate);
+        multimode.prepare(sampleRate);
         ampEnv.prepare(sampleRate);
         filterEnv.prepare(sampleRate);
         outputDC.prepare(sampleRate); mixerDC.prepare(sampleRate);
@@ -450,13 +499,15 @@ public:
         decimA.reset(); decimB.reset();
         currentNote = -1; targetMidi = currentMidi = 60.0; heldNotes.clear();
         heldNotes.ensureStorageAllocated(128);
+        multimode.reset();
+        filterWeights.fill(0.0); filterWeights[static_cast<size_t>(params.filterMode)] = 1.0;
         lastOutput = 0.0; lfoFadeValue = 1.0;
     }
 
     void setParameters(const MonoParameters& p)
     {
         params = p;
-        if (!parametersInitialised) { smoothed = p; parametersInitialised = true; }
+        if (!parametersInitialised) { smoothed = p; parametersInitialised = true; filterWeights.fill(0.0); filterWeights[static_cast<size_t>(p.filterMode)] = 1.0; }
         ampEnv.set(p.ampAttack, p.ampDecay, p.ampSustain, p.ampRelease);
         filterEnv.set(p.filterAttack, p.filterDecay, p.filterSustain, p.filterRelease);
     }
@@ -560,6 +611,8 @@ private:
         p.outputDrive = smoothed.outputDrive += smoothingCoefficient * (params.outputDrive - smoothed.outputDrive);
         p.master = smoothed.master += smoothingCoefficient * (params.master - smoothed.master);
         p.analogDriftCents = smoothed.analogDriftCents += smoothingCoefficient * (params.analogDriftCents - smoothed.analogDriftCents);
+        p.modEnvPitch = smoothed.modEnvPitch += smoothingCoefficient * (params.modEnvPitch - smoothed.modEnvPitch);
+        p.modEnvPWM = smoothed.modEnvPWM += smoothingCoefficient * (params.modEnvPWM - smoothed.modEnvPWM);
         if (p.glideSeconds > 0.0)
         {
             const double a = 1.0 - std::exp(-1.0 / (p.glideSeconds * sampleRate));
@@ -574,11 +627,13 @@ private:
         else
             lfoFadeValue = juce::jmin(1.0, lfoFadeValue + 1.0 / (p.lfoFadeSeconds * sampleRate));
         const double lf = l * lfoFadeValue;
-        const double pitchMod = lf * p.lfoPitchCents / 100.0;
+        const double fe = filterEnv.process();
+        const double ae = ampEnv.process();
+        const double pitchMod = lf * p.lfoPitchCents / 100.0 + fe * p.modEnvPitch;
         const double baseHz = 440.0 * std::pow(2.0, (currentMidi + pitchMod - 69.0) / 12.0);
 
         osc1.setWave(p.osc1Wave); osc2.setWave(p.osc2Wave); sub.setWave(p.subWave);
-        const double modPW = juce::jlimit(0.05, 0.95, p.pulseWidth + lf * p.lfoPWM * 0.45);
+        const double modPW = juce::jlimit(0.05, 0.95, p.pulseWidth + (lf * p.lfoPWM + fe * p.modEnvPWM) * 0.45);
         osc1.setPulseWidth(modPW); osc2.setPulseWidth(modPW);
         osc1.setDriftCents(p.analogDriftCents);
         osc2.setDriftCents(p.analogDriftCents * 1.13);
@@ -599,11 +654,19 @@ private:
         const double mixGain = 0.65 + 4.5 * p.mixerDrive;
         mix = mixerDC.process(saturateAsymmetric(mix * mixGain) / std::sqrt(juce::jmax(1.0, mixGain)));
 
-        const double fe = filterEnv.process();
-        const double ae = ampEnv.process();
-
         filter.setParams(p.cutoffHz, p.resonance, p.filterDrive, p.keyTrack, currentMidi);
-        double y = filter.process(mix, fe * p.filterEnvOct + lf * p.lfoFilterOct);
+        const double filterMod = fe * p.filterEnvOct + lf * p.lfoFilterOct;
+        const double ladder = filter.process(mix, filterMod);
+        const double keyOct = (currentMidi - 60.0) / 12.0 * p.keyTrack;
+        const auto classic = multimode.process(mix, p.cutoffHz * std::pow(2.0, keyOct + filterMod), p.resonance, p.filterDrive);
+        double y = 0.0;
+        const size_t selected = static_cast<size_t>(p.filterMode);
+        // Keep all filter states running and crossfade; changing type never clears the tail.
+        for (size_t mode = 0; mode < filterWeights.size(); ++mode)
+        {
+            filterWeights[mode] += smoothingCoefficient * ((mode == selected ? 1.0 : 0.0) - filterWeights[mode]);
+            y += filterWeights[mode] * (mode == 0 ? ladder : classic[mode - 1]);
+        }
 
         const double tremolo = 1.0 - p.lfoAmp * 0.5 * (lf + 1.0);
         const double vca = y * ae * velocityGain * tremolo;
@@ -624,6 +687,8 @@ private:
     BandLimitedOscillator osc1, osc2, sub;
     AnalogLFO lfo;
     NonlinearLadder filter;
+    ClassicMultimode multimode;
+    std::array<double, 7> filterWeights {1.0,0.0,0.0,0.0,0.0,0.0,0.0};
     AnalogADSR ampEnv, filterEnv;
     DCBlocker outputDC, mixerDC;
     HalfBandDecimator2x decimA, decimB;

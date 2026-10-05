@@ -248,6 +248,9 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
     p.cutoffHz = apvts.getRawParameterValue("cutoff")->load();
     p.resonance = apvts.getRawParameterValue("resonance")->load();
     p.filterDrive = apvts.getRawParameterValue("filterDrive")->load();
+    p.filterMode = static_cast<jerzy::FilterMode>(getChoiceIndex("filterMode"));
+    p.modEnvPitch = apvts.getRawParameterValue("modEnvPitch")->load();
+    p.modEnvPWM = apvts.getRawParameterValue("modEnvPWM")->load();
     p.filterEnvOct = apvts.getRawParameterValue("filterEnv")->load();
     p.keyTrack = apvts.getRawParameterValue("keyTrack")->load();
     p.filterAttack = apvts.getRawParameterValue("fA")->load();
@@ -459,6 +462,17 @@ void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
             for(int i=0;i<count;++i) gridPattern[(size_t)i].store(bits[i]=='1'?1:0);
         }
         st.removeProperty("gridMode",nullptr);st.removeProperty("gridBank",nullptr);st.removeProperty("gridRoot",nullptr);st.removeProperty("gridPattern",nullptr);
+        // An old preset must reset destinations added in 0.4 instead of inheriting
+        // whatever the previously loaded preset left in the current processor.
+        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM"})
+        {
+            if(!st.getChildWithProperty("id",id).isValid())
+            {
+                juce::ValueTree parameter("PARAM");
+                parameter.setProperty("id",id,nullptr);parameter.setProperty("value",0.0f,nullptr);
+                st.addChild(parameter,-1,nullptr);
+            }
+        }
         apvts.replaceState(st);
     }
 }
@@ -521,7 +535,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<C>("gridScale","Grid Scale",juce::StringArray{"Chromatic","Major","Natural Minor","Dorian","Phrygian","Mixolydian","Major Pent","Minor Pent"},1));
     l.add(std::make_unique<C>("gridBanks","Grid Length",juce::StringArray{"1 bank / 8 steps","2 banks / 16 steps","3 banks / 24 steps","4 banks / 32 steps","5 banks / 40 steps","6 banks / 48 steps","7 banks / 56 steps","8 banks / 64 steps"},7));
     l.add(std::make_unique<B>("gridMidiTrigger","Grid MIDI Trigger",false));
+    // Append new IDs so existing parameter indices and automation stay intact.
+    l.add(std::make_unique<C>("filterMode","Filter Mode",juce::StringArray{"Ladder 24 dB","LP 12 dB","LP 24 dB","HP 12 dB","HP 24 dB","BP 12 dB","BP 24 dB"},0));
+    l.add(std::make_unique<P>("modEnvPitch","Mod Env Pitch",-24.0f,24.0f,0.0f));
+    l.add(std::make_unique<P>("modEnvPWM","Mod Env PWM",-1.0f,1.0f,0.0f));
     return l;
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new JerzyMonoAnalogAudioProcessor(); }
+

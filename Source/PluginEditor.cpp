@@ -247,6 +247,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
 
     setupCombo(osc1Wave,{"SINE","TRIANGLE","SAW","SQUARE"});setupCombo(osc1Oct,{"16'","8'","4'","2'","1'"});
     setupCombo(osc2Wave,{"SINE","TRIANGLE","SAW","SQUARE"});setupCombo(osc2Oct,{"16'","8'","4'","2'","1'"});
+    setupCombo(filterMode,{"LADDER 24 dB","LP 12 dB","LP 24 dB","HP 12 dB","HP 24 dB","BP 12 dB","BP 24 dB"});
     setupCombo(subWave,{"SINE","SQUARE"});
     setupCombo(lfoWave,{"SINE","TRIANGLE","SAW","SQUARE","S&H"});
     setupCombo(lfoDivision,{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"});
@@ -262,10 +263,13 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
 
     addSection("OSC 1",C(GREEN),15,75,245,215);addSection("OSC 2",C(YELLOW),265,75,265,215);addSection("SUB / NOISE",C(RED),535,75,210,215);
     addSection("MIXER / DRIVE",C(RED),750,75,190,215);addSection("FILTER",C(GREEN),945,75,480,215);
-    addSection("AMP ENV",C(GREEN),15,300,255,205);addSection("FILTER ENV",C(YELLOW),275,300,255,205);addSection("LFO",C(RED),535,300,890,205);
+    addSection("AMP ENV",C(GREEN),15,300,255,205);addSection("MOD ENV",C(YELLOW),275,300,255,205);addSection("LFO",C(RED),535,300,890,205);
     addSection("PLAY MODE",C(YELLOW),15,515,720,175);addSection("OUTPUT",C(GREEN),740,515,685,175);
 
     auto&s=proc.apvts;
+    filterModeA=std::make_unique<ComboAttachment>(s,"filterMode",filterMode);
+    modEnvPitchA=std::make_unique<SliderAttachment>(s,"modEnvPitch",modEnvPitch);
+    modEnvPWMA=std::make_unique<SliderAttachment>(s,"modEnvPWM",modEnvPWM);
     osc1WaveA=std::make_unique<ComboAttachment>(s,"osc1Wave",osc1Wave);osc1OctA=std::make_unique<ComboAttachment>(s,"osc1Oct",osc1Oct);
     osc2WaveA=std::make_unique<ComboAttachment>(s,"osc2Wave",osc2Wave);osc2OctA=std::make_unique<ComboAttachment>(s,"osc2Oct",osc2Oct);
     subWaveA=std::make_unique<ComboAttachment>(s,"subWave",subWave);lfoWaveA=std::make_unique<ComboAttachment>(s,"lfoWave",lfoWave);
@@ -298,8 +302,13 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupEnvSlider(fA,"ATTACK","s",0.0);setupEnvSlider(fD,"DECAY","s",0.0);setupEnvSlider(fS,"SUSTAIN","",0.0);setupEnvSlider(fR,"RELEASE","s",0.0);
     setupKnob(lfoRate,"RATE","Hz",0.03);setupKnob(lfoPitch,"PITCH","ct",0.0);setupKnob(lfoFilter,"FILTER","oct",0.0);setupKnob(lfoPWM,"PWM","",0.0);setupKnob(lfoAmp,"AMP","",0.0);setupKnob(lfoFade,"FADE IN","s",0.0);
     setupKnob(glide,"GLIDE","s",0.0);setupKnob(outDrive,"OUTPUT DRIVE","",0.0);setupKnob(master,"MASTER","",0.8);
+    setupKnob(modEnvPitch,"MOD ENV PITCH","st",0.0);setupKnob(modEnvPWM,"MOD ENV PWM","",0.0);
     setupKnob(arpGate,"GATE","",0.72);
 
+    modEnvPitch.setSliderStyle(juce::Slider::LinearHorizontal);modEnvPitch.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,22);
+    modEnvPWM.setSliderStyle(juce::Slider::LinearHorizontal);modEnvPWM.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,22);
+    modEnvPWM.textFromValueFunction=[](double v){return juce::String(v*100.0,0)+" %";};
+    modEnvPWM.valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()*0.01;};modEnvPWM.updateText();
     setArpPanelVisible(false);
     setMainPage(false);
     startTimerHz(20);
@@ -396,6 +405,9 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
     drawLabelBox(g,"MIX DRIVE",770,263,75);drawLabelBox(g,"DRIFT",855,263,65);
     drawLabelBox(g,"CUTOFF",958,263,82);drawLabelBox(g,"RESONANCE",1048,263,82);drawLabelBox(g,"FILTER DRIVE",1138,263,82);drawLabelBox(g,"ENV AMOUNT",1228,263,82);drawLabelBox(g,"KEY TRACK",1318,263,82);
 
+    drawLabelBox(g,"FILTER MODE",958,108,442);
+    drawLabelBox(g,"ENV > PITCH",960,334,190);drawLabelBox(g,"ENV > PWM",1170,334,190);
+
     // ENV labels
     drawLabelBox(g,"A",32,477,48);drawLabelBox(g,"D",92,477,48);drawLabelBox(g,"S",152,477,48);drawLabelBox(g,"R",212,477,48);
     drawLabelBox(g,"A",292,477,48);drawLabelBox(g,"D",352,477,48);drawLabelBox(g,"S",412,477,48);drawLabelBox(g,"R",472,477,48);
@@ -464,7 +476,9 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
     place(subWave,555,128,170,30);place(subLevel,555,168,80,88);place(noiseLevel,645,168,80,88);
     place(mixDrive,770,155,75,100);place(drift,855,155,65,100);
 
-    place(cutoff,958,145,82,110);place(resonance,1048,145,82,110);place(filterDrive,1138,145,82,110);place(filterEnv,1228,145,82,110);place(keyTrack,1318,145,82,110);
+    place(filterMode,958,128,442,30);
+    place(cutoff,958,168,82,88);place(resonance,1048,168,82,88);place(filterDrive,1138,168,82,88);place(filterEnv,1228,168,82,88);place(keyTrack,1318,168,82,88);
+    place(modEnvPitch,960,354,190,30);place(modEnvPWM,1170,354,190,30);
 
     place(aA,30,370,54,98);place(aD,90,370,54,98);place(aS,150,370,54,98);place(aR,210,370,54,98);
     place(fA,290,370,54,98);place(fD,350,370,54,98);place(fS,410,370,54,98);place(fR,470,370,54,98);
@@ -490,6 +504,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setSynthControlsVisible(bool v)
         (juce::Component*)&lfoWave,(juce::Component*)&lfoDivision,(juce::Component*)&glideMode,(juce::Component*)&priority,
         (juce::Component*)&arpDivision,(juce::Component*)&arpPattern,(juce::Component*)&arpRhythm,(juce::Component*)&arpOctaves,
         (juce::Component*)&osc1Level,(juce::Component*)&pulseWidth,(juce::Component*)&osc2Level,(juce::Component*)&detune,(juce::Component*)&subLevel,(juce::Component*)&noiseLevel,
+        (juce::Component*)&filterMode,(juce::Component*)&modEnvPitch,(juce::Component*)&modEnvPWM,
         (juce::Component*)&mixDrive,(juce::Component*)&drift,(juce::Component*)&cutoff,(juce::Component*)&resonance,(juce::Component*)&filterDrive,(juce::Component*)&filterEnv,(juce::Component*)&keyTrack,
         (juce::Component*)&aA,(juce::Component*)&aD,(juce::Component*)&aS,(juce::Component*)&aR,(juce::Component*)&fA,(juce::Component*)&fD,(juce::Component*)&fS,(juce::Component*)&fR,
         (juce::Component*)&lfoRate,(juce::Component*)&lfoPitch,(juce::Component*)&lfoFilter,(juce::Component*)&lfoPWM,(juce::Component*)&lfoAmp,(juce::Component*)&lfoFade,

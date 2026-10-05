@@ -104,12 +104,13 @@ private:
     ResetSlider gridGate;
     PadGrid padGrid;
 
+    juce::ComboBox filterMode;
     juce::ComboBox osc1Wave,osc1Oct,osc2Wave,osc2Oct,subWave;
     juce::ComboBox lfoWave,lfoDivision,glideMode,priority;
     juce::ComboBox arpDivision,arpPattern,arpRhythm,arpOctaves;
 
     ResetSlider osc1Level,pulseWidth,osc2Level,detune,subLevel,noiseLevel,mixDrive,drift;
-    ResetSlider cutoff,resonance,filterDrive,filterEnv,keyTrack;
+    ResetSlider cutoff,resonance,filterDrive,filterEnv,keyTrack,modEnvPitch,modEnvPWM;
     ResetSlider aA,aD,aS,aR,fA,fD,fS,fR;
     ResetSlider lfoRate,lfoPitch,lfoFilter,lfoPWM,lfoAmp,lfoFade;
     ResetSlider glide,outDrive,master;
@@ -123,6 +124,8 @@ private:
     std::unique_ptr<ComboAttachment> arpDivisionA,arpPatternA,arpRhythmA,arpOctavesA;
     std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA;
     std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
+    std::unique_ptr<ComboAttachment> filterModeA;
+    std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
     std::unique_ptr<SliderAttachment> cutoffA,resonanceA,filterDriveA,filterEnvA,keyTrackA;
     std::unique_ptr<SliderAttachment> aAA,aDA,aSA,aRA,fAA,fDA,fSA,fRA;
     std::unique_ptr<SliderAttachment> lfoRateA,lfoPitchA,lfoFilterA,lfoPWMA,lfoAmpA,lfoFadeA;
@@ -133,3 +136,4 @@ private:
     bool padsPage=false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessorEditor)
 };
+
