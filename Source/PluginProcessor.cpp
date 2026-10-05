@@ -31,6 +31,7 @@ void JerzyMonoAnalogAudioProcessor::prepareToPlay(double sr, int bs)
 {
     currentSampleRate = sr;
     engine.prepare(sr, bs);
+    fxChain.prepare(sr, bs);
     resetArpState();
     gridSamplesToNext=0.0;
     gridCurrentStepSamples=0.0;
@@ -518,6 +519,7 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
         const float old = outputMeter.load();
         outputMeter.store(ay > old ? ay : old * 0.9975f);
     }
+    fxChain.process(b,apvts,bpm);
     midi.addEvents(generatedMidi,0,b.getNumSamples(),0);
 }
 
@@ -532,6 +534,7 @@ void JerzyMonoAnalogAudioProcessor::getStateInformation(juce::MemoryBlock& mb)
     juce::String bits;
     for(size_t i=0;i<gridPattern.size();++i) bits << (gridPattern[i].load() ? "1" : "0");
     state.setProperty("gridPattern",bits,nullptr);
+    juce::String order; for(int x:fxChain.getOrder()){if(order.isNotEmpty())order<<",";order<<x;} state.setProperty("fxOrder",order,nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml()); copyXmlToBinary(*xml, mb);
 }
 void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
@@ -550,13 +553,27 @@ void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
             for(int i=0;i<count;++i) gridPattern[(size_t)i].store(bits[i]=='1'?1:0);
         }
         st.removeProperty("gridMode",nullptr);st.removeProperty("gridBank",nullptr);st.removeProperty("gridRoot",nullptr);st.removeProperty("gridPattern",nullptr);
+        if(st.hasProperty("fxOrder")){auto tokens=juce::StringArray::fromTokens(st["fxOrder"].toString(),",","");std::array<int,MonoFxChain::count> order{0,1,2,3,4,5};if(tokens.size()==MonoFxChain::count){for(int i=0;i<MonoFxChain::count;++i)order[(size_t)i]=tokens[i].getIntValue();fxChain.setOrder(order);}st.removeProperty("fxOrder",nullptr);}
         // An old preset must reset destinations added in 0.4 instead of inheriting
         // whatever the previously loaded preset left in the current processor.
-        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync"})
+        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth"})
         {
             if(!st.getChildWithProperty("id",id).isValid())
             {
-                const float defaultValue = juce::String(id)=="gridVelocity" ? 0.95f
+                const float defaultValue = juce::String(id)=="fxCompThreshold" ? -18.0f
+                                         : juce::String(id)=="fxCompRatio" ? 4.0f
+                                         : juce::String(id)=="fxCompAttack" ? 0.01f
+                                         : juce::String(id)=="fxCompRelease" ? 0.12f
+                                         : juce::String(id)=="fxDelayDivision" || juce::String(id)=="fxRotaryDivision" ? 4.0f
+                                         : juce::String(id)=="fxDelayFeedback" ? 0.35f
+                                         : juce::String(id)=="fxDelayMix" || juce::String(id)=="fxReverbMix" || juce::String(id)=="fxChorusMix" ? 0.25f
+                                         : juce::String(id)=="fxReverbSize" || juce::String(id)=="fxWidth" || juce::String(id)=="fxChorusDepth" || juce::String(id)=="fxRotaryDepth" ? 0.6f
+                                         : juce::String(id)=="fxReverbDamping" ? 0.35f
+                                         : juce::String(id)=="fxChorusRate" ? 0.25f
+                                         : juce::String(id)=="fxRotaryRate" ? 1.0f
+                                         : juce::String(id)=="fxRotarySync" ? 1.0f
+                                         : juce::String(id)=="fxChorusFeedback" ? 0.15f
+                                         : juce::String(id)=="gridVelocity" ? 0.95f
                                          : juce::String(id)=="arpVelocity" ? 0.9f
                                          : (juce::String(id)=="gridHostSync" || juce::String(id)=="arpHostSync") ? 1.0f : 0.0f;
                 juce::ValueTree parameter("PARAM");
@@ -637,6 +654,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<P>("arpVelocity","Arp Velocity",0.01f,1.0f,0.9f));
     l.add(std::make_unique<B>("gridHostSync","Grid Host Sync",true));
     l.add(std::make_unique<B>("arpHostSync","Arp Host Sync",true));
+    // Output effects: appended IDs keep existing host automation and preset IDs stable.
+    l.add(std::make_unique<B>("fxCompOn","FX Compressor On",false));
+    l.add(std::make_unique<P>("fxCompThreshold","FX Comp Threshold",-36.0f,0.0f,-18.0f));
+    l.add(std::make_unique<P>("fxCompRatio","FX Comp Ratio",1.0f,20.0f,4.0f));
+    l.add(std::make_unique<P>("fxCompAttack","FX Comp Attack",juce::NormalisableRange<float>(0.0005f,0.1f,0.0f,0.35f),0.01f));
+    l.add(std::make_unique<P>("fxCompRelease","FX Comp Release",juce::NormalisableRange<float>(0.005f,1.0f,0.0f,0.35f),0.12f));
+    l.add(std::make_unique<P>("fxCompDrive","FX Comp Drive",0.0f,1.0f,0.0f));
+    l.add(std::make_unique<B>("fxDelayOn","FX Delay On",false));
+    l.add(std::make_unique<C>("fxDelayDivision","FX Delay Division",juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},4));
+    l.add(std::make_unique<C>("fxDelayMode","FX Delay Mode",juce::StringArray{"Mono","Stereo","Ping-Pong"},1));
+    l.add(std::make_unique<P>("fxDelayFeedback","FX Delay Feedback",0.0f,0.94f,0.35f));
+    l.add(std::make_unique<P>("fxDelayMix","FX Delay Mix",0.0f,1.0f,0.25f));
+    l.add(std::make_unique<B>("fxReverbOn","FX Reverb On",false));
+    l.add(std::make_unique<P>("fxReverbSize","FX Reverb Size",0.0f,1.0f,0.6f));
+    l.add(std::make_unique<P>("fxReverbDamping","FX Reverb Damping",0.0f,1.0f,0.35f));
+    l.add(std::make_unique<P>("fxReverbMix","FX Reverb Mix",0.0f,1.0f,0.25f));
+    l.add(std::make_unique<B>("fxWidthOn","FX Stereo Width On",false));
+    l.add(std::make_unique<P>("fxWidth","FX Stereo Width",0.0f,2.0f,0.6f));
+    l.add(std::make_unique<B>("fxChorusOn","FX Chorus On",false));
+    l.add(std::make_unique<C>("fxChorusMode","FX Chorus Mode",juce::StringArray{"Juno Chorus","Chorus","Flanger"},0));
+    l.add(std::make_unique<P>("fxChorusRate","FX Chorus Rate",0.05f,8.0f,0.25f));
+    l.add(std::make_unique<P>("fxChorusDepth","FX Chorus Depth",0.0f,1.0f,0.6f));
+    l.add(std::make_unique<P>("fxChorusMix","FX Chorus Mix",0.0f,1.0f,0.25f));
+    l.add(std::make_unique<P>("fxChorusFeedback","FX Flanger Feedback",-0.85f,0.85f,0.15f));
+    l.add(std::make_unique<B>("fxRotaryOn","FX Rotary On",false));
+    l.add(std::make_unique<B>("fxRotarySync","FX Rotary Sync",true));
+    l.add(std::make_unique<C>("fxRotaryDivision","FX Rotary Division",juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},4));
+    l.add(std::make_unique<P>("fxRotaryRate","FX Rotary Rate",0.1f,8.0f,1.0f));
+    l.add(std::make_unique<P>("fxRotaryDepth","FX Rotary Depth",0.0f,1.0f,0.6f));
     return l;
 }
 

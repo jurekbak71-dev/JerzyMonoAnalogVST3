@@ -125,3 +125,13 @@ The Ladder 24 dB path is unchanged when the new destinations are zero.
   separate note and modulation sequencing concepts), Arturia KeyStep Pro and
   Novation Summit arpeggiator documentation (key order, octave range, rhythm,
   swing, gate and performance control).
+
+
+## 0.6.0 — Output FX chain
+
+A dedicated FX page adds six reorderable output effects: compressor/limiter with
+soft-clipping drive, tempo-synced mono/stereo/ping-pong delay, stereo reverb,
+mid/side stereo width, Juno-style chorus/chorus/flanger, and a stereo rotary
+speaker with optional host-tempo sync. FX order is stored with the plugin state.
+Every FX control is a host-automatable parameter; generated and incoming MIDI is
+left intact. Effects are bypassed by default to preserve existing presets.

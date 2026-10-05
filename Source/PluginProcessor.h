@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "AnalogDSP.h"
+#include "MonoFxChain.h"
 
 class JerzyMonoAnalogAudioProcessor : public juce::AudioProcessor
 {
@@ -29,6 +30,8 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     float getOutputMeter() const noexcept { return outputMeter.load(); }
+    std::array<int, MonoFxChain::count> getFxOrder() const { return fxChain.getOrder(); }
+    void moveFx(int from,int to) { fxChain.move(from,to); }
 
     enum class GridMode { sequencer = 0, launch = 1 };
     void setGridMode(GridMode m) noexcept { gridMode.store((int)m); }
@@ -53,6 +56,7 @@ private:
     int gridRootMidiFromChoice() const;
     bool isGridMidiRunning() const noexcept { return gridMidiRunning.load(); }
     jerzy::MonoAnalogEngine engine;
+    MonoFxChain fxChain;
     std::atomic<float> outputMeter { 0.0f };
     double currentSampleRate = 44100.0;
     double arpSamplesToNext = 0.0;

@@ -183,6 +183,88 @@ void JerzyMonoAnalogAudioProcessorEditor::PadGrid::mouseUp(const juce::MouseEven
     }
 }
 
+MonoFxPanel::MonoFxPanel(JerzyMonoAnalogAudioProcessor& p):proc(p)
+{
+    static const char* ids[17]={"fxCompThreshold","fxCompRatio","fxCompAttack","fxCompRelease","fxCompDrive","fxDelayFeedback","fxDelayMix","fxReverbSize","fxReverbDamping","fxReverbMix","fxWidth","fxChorusRate","fxChorusDepth","fxChorusMix","fxChorusFeedback","fxRotaryRate","fxRotaryDepth"};
+    static const char* labels[17]={"THRESHOLD","RATIO","ATTACK","RELEASE","DRIVE","FEEDBACK","MIX","ROOM","DAMP","MIX","WIDTH","RATE","DEPTH","MIX","FB","FREE RATE","DEPTH"};
+    for(int i=0;i<17;++i)
+    {
+        auto& s=knobs[(size_t)i];s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,64,18);
+        s.setColour(juce::Slider::rotarySliderFillColourId,C(RED));s.setColour(juce::Slider::rotarySliderOutlineColourId,C(0xff34383c));
+        addAndMakeVisible(s);knobAttachments[(size_t)i]=std::make_unique<SliderAttachment>(proc.apvts,ids[i],s);
+        knobLabels[(size_t)i].setText(labels[i],juce::dontSendNotification);knobLabels[(size_t)i].setJustificationType(juce::Justification::centred);knobLabels[(size_t)i].setColour(juce::Label::textColourId,lcdBg);addAndMakeVisible(knobLabels[(size_t)i]);
+    }
+    static const char* toggleIds[6]={"fxCompOn","fxDelayOn","fxReverbOn","fxWidthOn","fxChorusOn","fxRotaryOn"};
+    static const char* toggleNames[6]={"COMP / LIMIT","DELAY","RVERB STEREO","STEREO WIDER","CHORUS / FLANGER","ROTARY STEREO"};
+    const juce::Colour colors[6]={C(RED),C(YELLOW),C(GREEN),C(GREEN),C(YELLOW),C(RED)};
+    for(int i=0;i<6;++i){auto& b=enabled[(size_t)i];b.setButtonText(toggleNames[i]);b.setColour(juce::ToggleButton::tickColourId,colors[i]);addAndMakeVisible(b);buttonAttachments[(size_t)i]=std::make_unique<ButtonAttachment>(proc.apvts,toggleIds[i],b);}
+    rotarySync.setButtonText("TEMPO SYNC");rotarySync.setColour(juce::ToggleButton::tickColourId,C(GREEN));addAndMakeVisible(rotarySync);
+    buttonAttachments[6]=std::make_unique<ButtonAttachment>(proc.apvts,"fxRotarySync",rotarySync);
+    static const juce::StringArray choices[4]={
+        {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},
+        {"MONO","STEREO","PING-PONG"},
+        {"JUNO","CHORUS","FLANGER"},
+        {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"}
+    };
+    const char* modeIds[4]={"fxDelayDivision","fxDelayMode","fxChorusMode","fxRotaryDivision"};
+    for(int i=0;i<4;++i){modes[(size_t)i].addItemList(choices[i],1);addAndMakeVisible(modes[(size_t)i]);modeAttachments[(size_t)i]=std::make_unique<ComboAttachment>(proc.apvts,modeIds[i],modes[(size_t)i]);}
+    orderSlot.addItemList({"SLOT 1","SLOT 2","SLOT 3","SLOT 4","SLOT 5","SLOT 6"},1);orderSlot.setSelectedItemIndex(0,juce::dontSendNotification);addAndMakeVisible(orderSlot);
+    moveUp.setButtonText("MOVE UP");moveDown.setButtonText("MOVE DOWN");addAndMakeVisible(moveUp);addAndMakeVisible(moveDown);
+    chainLabel.setColour(juce::Label::textColourId,lcdBg);chainLabel.setJustificationType(juce::Justification::centredLeft);addAndMakeVisible(chainLabel);
+    orderSlot.onChange=[this]{refreshOrder();};
+    moveUp.onClick=[this]{proc.moveFx(orderSlot.getSelectedItemIndex(),orderSlot.getSelectedItemIndex()-1);refreshOrder();};
+    moveDown.onClick=[this]{proc.moveFx(orderSlot.getSelectedItemIndex(),orderSlot.getSelectedItemIndex()+1);refreshOrder();};
+    rotarySync.onClick=[this]{const bool sync=rotarySync.getToggleState();modes[3].setEnabled(sync);knobs[15].setEnabled(!sync);};
+    const bool sync=proc.apvts.getRawParameterValue("fxRotarySync")->load()>0.5f;modes[3].setEnabled(sync);knobs[15].setEnabled(!sync);
+    refreshOrder();
+}
+
+void MonoFxPanel::refreshOrder()
+{
+    auto order=proc.getFxOrder();juce::String names[6]={"COMP","DELAY","RVERB","WIDER","CHORUS","ROTARY"};
+    juce::String line="OUTPUT CHAIN  ";
+    for(int i=0;i<6;++i){if(i)line<<"  >  ";line<<names[order[(size_t)i]];}
+    chainLabel.setText(line,juce::dontSendNotification);
+    moveUp.setEnabled(orderSlot.getSelectedItemIndex()>0);moveDown.setEnabled(orderSlot.getSelectedItemIndex()<5);
+    repaint();
+}
+
+void MonoFxPanel::paint(juce::Graphics& g)
+{
+    g.fillAll(C(0xff050607));auto bounds=getLocalBounds().toFloat().reduced(4.0f);
+    const char* titles[6]={"01  COMPRESSOR / LIMITER + DRIVE","02  TEMPO DELAY","03  STEREO REVERB","04  MID / SIDE WIDTH","05  JUNO CHORUS / FLANGER","06  ROTARY SPEAKER"};
+    for(int i=0;i<6;++i)
+    {
+        const int col=i%3,row=i/3;auto r=juce::Rectangle<float>(bounds.getX()+col*bounds.getWidth()/3.0f,bounds.getY()+68.0f+row*(bounds.getHeight()-68.0f)/2.0f,bounds.getWidth()/3.0f-8.0f,(bounds.getHeight()-68.0f)/2.0f-8.0f);
+        g.setColour(C(PANEL));g.fillRoundedRectangle(r,5.0f);g.setColour(C(EDGE));g.drawRoundedRectangle(r,5.0f,1.2f);
+        auto hd=r.removeFromTop(34.0f).reduced(8.0f,2.0f);g.setColour(lcdBg);g.fillRoundedRectangle(hd,2.0f);g.setColour(lcdText);
+        g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),11.0f,juce::Font::bold)));
+        g.drawFittedText(titles[i],hd.toNearestInt().reduced(4,0),juce::Justification::centredLeft,1);
+    }
+}
+void MonoFxPanel::resized()
+{
+    auto r=getLocalBounds();const int cardW=(r.getWidth()-20)/3, cardH=(r.getHeight()-76)/2;
+    orderSlot.setBounds(14,12,150,30);moveUp.setBounds(174,12,94,30);moveDown.setBounds(274,12,112,30);chainLabel.setBounds(400,12,r.getWidth()-414,30);
+    for(int i=0;i<6;++i)
+    {
+        const int x=10+(i%3)*cardW,y=74+(i/3)*cardH;
+        enabled[(size_t)i].setBounds(x+12,y+38,cardW-24,28);
+    }
+    auto knob=[&](int index,int x,int y,int w){knobLabels[(size_t)index].setBounds(x,y,w,18);knobs[(size_t)index].setBounds(x,y+18,w,82);};
+    const int colX[3]={10,10+cardW,10+2*cardW};
+    int x=colX[0],y=112;
+    for(int k=0;k<5;++k)knob(k,x+8+k*82,y+40,78);
+    modes[0].setBounds(colX[1]+16,154,140,28);modes[1].setBounds(colX[1]+168,154,140,28);
+    knob(5,colX[1]+55,190,95);knob(6,colX[1]+205,190,95);
+    knob(7,colX[2]+42,150,95);knob(8,colX[2]+164,150,95);knob(9,colX[2]+286,150,95);
+    knob(10,colX[0]+160,cardH+148,100);
+    modes[2].setBounds(colX[1]+14,cardH+148,120,28);
+    for(int k=11;k<=14;++k)knob(k,colX[1]+12+(k-11)*91,cardH+182,84);
+    rotarySync.setBounds(colX[2]+18,cardH+148,145,30);modes[3].setBounds(colX[2]+174,cardH+148,145,30);
+    knob(15,colX[2]+90,cardH+190,90);knob(16,colX[2]+220,cardH+190,90);
+}
+
 void JerzyMonoAnalogAudioProcessorEditor::OutputMeter::paint(juce::Graphics& g)
 {
     auto r=getLocalBounds().toFloat().reduced(1);g.setColour(C(0xff070809));g.fillRoundedRectangle(r,3);
@@ -195,7 +277,7 @@ void JerzyMonoAnalogAudioProcessorEditor::OutputMeter::paint(juce::Graphics& g)
 }
 
 JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMonoAnalogAudioProcessor& p)
-:AudioProcessorEditor(&p),proc(p),padGrid(p)
+:AudioProcessorEditor(&p),proc(p),padGrid(p),fxPanel(p)
 {
     setLookAndFeel(&look);setOpaque(true);setResizable(true,true);setResizeLimits(1000,500,1920,1200);getConstrainer()->setFixedAspectRatio(2.0);setSize(1200,600);
 
@@ -209,7 +291,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     addAndMakeVisible(arpPanelButton);
 
     pageButton.setButtonText("PADS");
-    pageButton.onClick=[this]{setMainPage(!padsPage);};
+    pageButton.onClick=[this]{setMainPage(fxPage?0:(padsPage?2:1));};
     addAndMakeVisible(pageButton);
 
     setupToggle(gridSeqOn,"SEQ PLAY",C(GREEN));
@@ -248,6 +330,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     };
     addAndMakeVisible(gridBankBox);
     addAndMakeVisible(padGrid);
+    addAndMakeVisible(fxPanel);fxPanel.setVisible(false);
 
     setupCombo(osc1Wave,{"SINE","TRIANGLE","SAW","SQUARE"});setupCombo(osc1Oct,{"16'","8'","4'","2'","1'"});
     setupCombo(osc2Wave,{"SINE","TRIANGLE","SAW","SQUARE"});setupCombo(osc2Oct,{"16'","8'","4'","2'","1'"});
@@ -390,12 +473,12 @@ void JerzyMonoAnalogAudioProcessorEditor::drawEnvelope(juce::Graphics&g,juce::Re
 void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(C(0xff050607));const float sc=scale();g.setColour(C(0xff15181b));g.fillRect(0,0,getWidth(),juce::roundToInt(64*sc));
-    if(!padsPage)
+    if(!padsPage && !fxPage)
     {
         for(const auto&s:sections)drawSection(g,s);
         drawEnvelope(g,{35,330,215,34},false);drawEnvelope(g,{295,330,215,34},true);
     }
-    else
+    else if(padsPage)
     {
         auto outer=juce::Rectangle<float>(15*sc,75*sc,1410*sc,615*sc);
         g.setColour(C(PANEL));g.fillRoundedRectangle(outer,6*sc);
@@ -406,7 +489,7 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
         g.drawText("8x8 RGB GRID / 64-STEP SEQUENCER / LAUNCHPAD",hdr.toNearestInt().reduced(20,0),juce::Justification::centredLeft);
     }
 
-    if(!padsPage)
+    if(!padsPage && !fxPage)
     {
 
     // Row 1 labels
@@ -432,7 +515,7 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
     drawLabelBox(g,"OUTPUT LEVEL",770,550,210);drawLabelBox(g,"OUTPUT DRIVE",1040,665,110);drawLabelBox(g,"MASTER",1190,665,110);
 
     }
-    if(!padsPage && arpPanelOpen)
+    if(!padsPage && !fxPage && arpPanelOpen)
     {
         auto r=juce::Rectangle<float>(15*sc,720*sc,1410*sc,165*sc);g.setColour(C(PANEL));g.fillRoundedRectangle(r,5*sc);g.setColour(C(EDGE));g.drawRoundedRectangle(r,5*sc,1.2f*sc);
         auto hdr=r.removeFromTop(30*sc).reduced(5*sc,3*sc);g.setColour(lcdBg);g.fillRoundedRectangle(hdr,2*sc);g.setColour(lcdText);
@@ -463,8 +546,9 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
     subtitle.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),11*sc,juce::Font::bold)));
     preset.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),10*sc,juce::Font::bold)));
     place(title,20,10,310,40);place(subtitle,515,13,410,35);place(preset,1050,13,250,35);place(pageButton,1310,13,105,35);
-    if(!padsPage) place(arpPanelButton,1320,684,95,28);
+    if(!padsPage && !fxPage) place(arpPanelButton,1320,684,95,28);
 
+    if(fxPage){place(fxPanel,15,75,1410,615);return;}
     if(padsPage)
     {
         place(gridModeButton,35,132,140,34);
@@ -531,26 +615,18 @@ void JerzyMonoAnalogAudioProcessorEditor::setSynthControlsVisible(bool v)
         setArpPanelVisible(arpPanelOpen);
 }
 
-void JerzyMonoAnalogAudioProcessorEditor::setMainPage(bool pads)
+void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
 {
-    padsPage=pads;
-    pageButton.setButtonText(pads?"SYNTH":"PADS");
-
-    if(pads)
-    {
-        getConstrainer()->setFixedAspectRatio(2.0);
-        arpPanelOpen=false;
-        setSynthControlsVisible(false);
-        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
-        const int w=getWidth();setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));
-    }
-    else
-    {
-        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(false);
-        setSynthControlsVisible(true);
-    }
+    padsPage=page==1;fxPage=page==2;
+    pageButton.setButtonText(padsPage?"FX":(fxPage?"SYNTH":"PADS"));
+    setSynthControlsVisible(!padsPage&&!fxPage);
+    for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
+                 (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid})
+        c->setVisible(padsPage);
+    fxPanel.setVisible(fxPage);
+    const int w=getWidth();
+    getConstrainer()->setFixedAspectRatio(2.0);arpPanelOpen=false;
+    setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));
     resized();repaint();
 }
 

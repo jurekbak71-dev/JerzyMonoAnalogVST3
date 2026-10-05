@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(JerzyMonoAnalog VERSION 0.5.0 LANGUAGES C CXX)
+project(JerzyMonoAnalog VERSION 0.6.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +37,7 @@ target_sources(JerzyMonoAnalog PRIVATE
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/AnalogDSP.h
+    Source/MonoFxChain.h
 )
 
 target_compile_definitions(JerzyMonoAnalog

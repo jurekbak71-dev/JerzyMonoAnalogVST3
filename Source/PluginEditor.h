@@ -32,6 +32,32 @@ private:
     double neutralValue=0.0;
 };
 
+class MonoFxPanel : public juce::Component
+{
+public:
+    explicit MonoFxPanel(JerzyMonoAnalogAudioProcessor&);
+    void resized() override;
+    void paint(juce::Graphics&) override;
+private:
+    using SliderAttachment=juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttachment=juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using ComboAttachment=juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    JerzyMonoAnalogAudioProcessor& proc;
+    std::array<juce::ToggleButton,6> enabled;
+    juce::ToggleButton rotarySync;
+    std::array<ResetSlider,17> knobs;
+    std::array<juce::Label,17> knobLabels;
+    std::array<juce::ComboBox,4> modes;
+    juce::ComboBox orderSlot;
+    juce::TextButton moveUp,moveDown;
+    juce::Label chainLabel;
+    std::array<std::unique_ptr<SliderAttachment>,17> knobAttachments;
+    std::array<std::unique_ptr<ButtonAttachment>,7> buttonAttachments;
+    std::array<std::unique_ptr<ComboAttachment>,4> modeAttachments;
+    bool updatingOrder=false;
+    void refreshOrder();
+};
+
 class JerzyMonoAnalogAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -85,7 +111,7 @@ private:
     void drawLabelBox(juce::Graphics&,const juce::String&,float,float,float) const;
     void drawEnvelope(juce::Graphics&,juce::Rectangle<float>,bool) const;
     void setArpPanelVisible(bool);
-    void setMainPage(bool pads);
+    void setMainPage(int page);
     void setSynthControlsVisible(bool);
     void updateGridControls();
     float scale() const noexcept {return getWidth()/1440.0f;}
@@ -103,6 +129,7 @@ private:
     juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection;
     ResetSlider gridGate,gridSwing,gridVelocity;
     PadGrid padGrid;
+    MonoFxPanel fxPanel;
 
     juce::ComboBox filterMode;
     juce::ComboBox osc1Wave,osc1Oct,osc2Wave,osc2Oct,subWave;
@@ -134,6 +161,7 @@ private:
 
     bool arpPanelOpen=false;
     bool padsPage=false;
+    bool fxPage=false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessorEditor)
 };
 
