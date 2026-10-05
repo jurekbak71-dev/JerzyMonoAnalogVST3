@@ -16,8 +16,8 @@ inline double smooth(double a, double b, double t) { t = clamp(t, 0.0, 1.0); ret
 struct Stereo { double l=0, r=0; Stereo operator+(Stereo b) const { return {l+b.l,r+b.r}; } Stereo operator*(double g) const { return {l*g,r*g}; } };
 
 struct Parameters {
-    bool bass=true, pad=false, direct=false, latch=false, restart=false, evolve=false;
-    int model=0, style=0, scale=1, division=2, bars=1, meter=0, numerator=4, denominator=4;
+    bool bass=true, pad=false, direct=false, latch=false, restart=false, evolve=false, legato=false;
+    int model=0, bassWave=0, style=0, scale=1, division=2, bars=1, meter=0, numerator=4, denominator=4;
     int seed=71, chord=1, padMode=1, engine1=0, engine2=1;
     double density=.75, movement=.4, gate=.55, swing=0, variation=.15, slide=.3, accent=.5;
     double bassLevel=.6, cutoff=1200, resonance=.35, filterEnv=.65, drive=.2;
@@ -154,10 +154,12 @@ public:
                 const double sweep=24*std::exp(-elapsed/.012);
                 double body=o1.next(hz(pitch+bend+sweep),rate*2,2);
                 double click=std::sin(2*pi*1800*elapsed)*std::exp(-elapsed/.0025)*.22;
-                result+=std::tanh((body+click)*(1+3*p.drive))/(1+p.drive);
+                double x=std::tanh((body+click)*(1+3*p.drive))/(1+p.drive);
+                double fc=p.cutoff*std::exp2(filterLevel*p.filterEnv*(accented?4.5:3.5));
+                result+=filter.process(x,fc,p.resonance,rate*2,p.drive*.3);
             } else {
-                double x=o1.next(f,rate*2,p.model==0?0:1,p.pulse);
-                if(p.model==2) x=.6*x+.4*o2.next(f*1.003,rate*2,0);
+                double x=o1.next(f,rate*2,p.bassWave,p.pulse);
+                if(p.model==2) x=.6*x+.4*o2.next(f*1.003,rate*2,1-p.bassWave,p.pulse);
                 x=x*.7+subOsc.next(f*.5,rate*2,2)*p.sub*.45;
                 double fc=p.cutoff*std::exp2(filterLevel*p.filterEnv*(accented?5.5:4));
                 result+=filter.process(x,fc,p.resonance,rate*2,p.drive);
@@ -374,11 +376,12 @@ class Instrument {
         int nextRoot=latest?latest->note:(p.latch?root:-1);
         int channel=latest?latest->channel:rootChannel;
         if(nextRoot!=root || channel!=rootChannel) {
+            bool overlapping=root>=0;
             root=nextRoot;rootChannel=channel;
             velocity=latest?latest->velocity:velocity;
             if(root>=0) {
                 if(p.restart) { anchor=ppq;lastStep=std::numeric_limits<int64_t>::min(); }
-                if(p.direct) bass.note(root,velocity,false,false);
+                if(p.direct) bass.note(root,velocity,p.legato&&overlapping,false);
                 else { bass.note(root,velocity,false,false);gateUntil=ppq+divisionBeats(p.division)*p.gate;previousSlide=false; }
                 if(p.pad) startPad(p,true);
             } else { bass.off();for(auto& v:pads) v.off();previousSlide=false; }
@@ -399,10 +402,11 @@ public:
     void noteOn(int note,int channel,double v,const Parameters& p,double ppq) {
         if(note<0||note>127||channel<1||channel>16) return;
         if(v<=0) { noteOff(note,channel,p,ppq);return; }
+        bool sameRoot=root==note&&rootChannel==channel;
         auto& h=held[size_t((channel-1)*128+note)];h={note,channel,clamp(v,0.0,1.0),++serial,true,false};
         chooseRoot(p,ppq);
         // Repeated same-pitch MIDI notes still articulate in DIRECT mode.
-        if(p.direct) bass.note(note,v,false,false);
+        if(p.direct&&sameRoot) bass.note(note,v,p.legato,false);
     }
     void noteOff(int note,int channel,const Parameters& p,double ppq) {
         if(note<0||note>127||channel<1||channel>16) return;

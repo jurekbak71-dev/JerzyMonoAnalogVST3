@@ -41,6 +41,18 @@ int main() {
             auto stream=file.createOutputStream();require(stream!=nullptr,"GUI snapshot output");
             juce::PNGImageFormat png;require(png.writeImageToStream(image,*stream),"GUI PNG encoding");
         }
+        editor->setSize(1040,740);
+        for(const auto& tab:juce::StringArray{"AMBIENT","FX RACK"}) {
+            bool found=false;
+            for(int i=0;i<editor->getNumChildComponents();++i) if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i))) {
+                if(button->getButtonText()==tab&&button->onClick) {button->onClick();found=true;break;}
+            }
+            require(found,"ambient / FX tab navigation");
+            auto image=editor->createComponentSnapshot(editor->getLocalBounds(),true,1);
+            auto file=juce::File::getCurrentWorkingDirectory().getChildFile("gui-"+tab.removeCharacters(" ")+".png");
+            auto stream=file.createOutputStream();require(stream!=nullptr,"tab PNG output");
+            juce::PNGImageFormat png;require(png.writeImageToStream(image,*stream),"tab PNG encoding");
+        }
         processor.releaseResources();processor.setPlayHead(nullptr);
         std::cout<<"PASS host MIDI offsets, parameter bindings, preset/state restore, FX order and GUI at 3 sizes\n";
         return 0;
