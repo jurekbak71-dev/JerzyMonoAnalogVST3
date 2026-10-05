@@ -542,13 +542,13 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(bool pads)
         arpPanelOpen=false;
         setSynthControlsVisible(false);
         for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridHostSync,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
+                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
         const int w=getWidth();setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));
     }
     else
     {
-        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridGate,(juce::Component*)&padGrid}) c->setVisible(false);
+        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
+                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(false);
         setSynthControlsVisible(true);
     }
     resized();repaint();
