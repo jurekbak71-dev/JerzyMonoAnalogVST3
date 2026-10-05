@@ -60,9 +60,14 @@ public:
             slider.setSliderStyle(s.kind==2?juce::Slider::LinearHorizontal:juce::Slider::RotaryHorizontalVerticalDrag);
             slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,90,22);
             slider.setNumDecimalPlacesToDisplay(s.kind==2?0:3);
-            slider.setTooltip(s.label+" — automatable in FL Studio");
+            slider.setTooltip(s.label+" - automatable in FL Studio");
             addAndMakeVisible(slider);
             sliderAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,s.id,slider);
+            // APVTS installs its own formatter: override it after attachment creation.
+            slider.textFromValueFunction=[s](double value) {
+                return juce::String(value,s.kind==2?0:(s.maximum>=100?1:3));
+            };
+            slider.updateText();
             slider.setDoubleClickReturnValue(true,s.initial);
         }
     }
@@ -237,7 +242,7 @@ void BassAmbientEditor::paint(juce::Graphics& g) {
     g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
     g.drawText("JERZY  /  BASS AMBIENT",20,12,330,35,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12)));
-    g.drawText("0.2.0  •  PIANO ROLL ROOT  •  HOST SYNC",22,47,340,20,juce::Justification::centredLeft);
+    g.drawText("0.2.0  |  PIANO ROLL ROOT  |  HOST SYNC",22,47,340,20,juce::Justification::centredLeft);
 }
 void BassAmbientEditor::resized() {
     presets.setBounds(getWidth()-460,22,220,34);mutate.setBounds(getWidth()-228,22,100,34);panic.setBounds(getWidth()-116,22,96,34);
@@ -249,8 +254,8 @@ void BassAmbientEditor::resized() {
 }
 void BassAmbientEditor::timerCallback() {
     int root=processor.rootDisplay.load();float level=processor.peak.load();
-    juce::String note=root<0?"—":juce::MidiMessage::getMidiNoteName(root,true,true,3);
-    juce::String db=level<.00001f?"−inf":juce::String(juce::Decibels::gainToDecibels(level),1);
+    juce::String note=root<0?"--":juce::MidiMessage::getMidiNoteName(root,true,true,3);
+    juce::String db=level<.00001f?"-inf":juce::String(juce::Decibels::gainToDecibels(level),1);
     status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Double-click knob: reset    |    FX: choose rack, then module",juce::dontSendNotification);
     for(int k=2;k<5;++k) pages[size_t(k)]->updateOrder();
 }
