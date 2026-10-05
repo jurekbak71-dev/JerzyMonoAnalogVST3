@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(JerzyMonoAnalog VERSION 0.2.0 LANGUAGES C CXX)
+project(JerzyMonoAnalog VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,3 +54,15 @@ target_link_libraries(JerzyMonoAnalog
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+
+include(CTest)
+if(BUILD_TESTING)
+    juce_add_console_app(MonoDSPTests PRODUCT_NAME "Mono DSP Tests")
+    juce_generate_juce_header(MonoDSPTests)
+    target_sources(MonoDSPTests PRIVATE tests/DSPTests.cpp)
+    target_include_directories(MonoDSPTests PRIVATE Source)
+    target_compile_definitions(MonoDSPTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(MonoDSPTests PRIVATE juce::juce_audio_utils)
+    add_test(NAME MonoDSP COMMAND MonoDSPTests)
+endif()

@@ -24,6 +24,10 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --parallel
 
+      - name: DSP regression tests
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
       - name: Locate and package VST3
         id: locate
         shell: pwsh
@@ -43,3 +47,4 @@ jobs:
             Jerzy-Mono-Analog-Grid-Windows-x64.zip
           if-no-files-found: error
           retention-days: 90
+

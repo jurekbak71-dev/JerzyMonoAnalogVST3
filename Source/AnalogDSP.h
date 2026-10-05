@@ -4,14 +4,15 @@
 #include <random>
 #include <cmath>
 #include <vector>
+#include "AnalogEnvelope.h"
 
 namespace jerzy
 {
 static inline double saturateAsymmetric(double x)
 {
     // Mild asymmetry gives a little even-harmonic content without hard clipping.
-    const double shaped = x + 0.028 * x * x - 0.004 * x * x * x;
-    return std::tanh(shaped);
+    constexpr double bias = 0.045;
+    return (std::tanh(x + bias) - std::tanh(bias)) / (1.0 - std::tanh(bias) * std::tanh(bias));
 }
 
 class DCBlocker
@@ -93,14 +94,17 @@ public:
 
     void setWave(Wave w) { wave = w; }
     void setFrequency(double hz) { frequency = juce::jlimit(0.01, sampleRate * 0.45, hz); }
-    void setPulseWidth(double p) { pw = juce::jlimit(0.08, 0.92, p); }
+    void setPulseWidth(double p) { pw = juce::jlimit(0.05, 0.95, p); }
     void setDriftCents(double c) { driftCents = juce::jlimit(0.0, 8.0, c); }
     void setKeyErrorCents(double c) { keyErrorCents = juce::jlimit(-18.0, 18.0, c); }
+
+    double getLastFrequency() const { return effectiveFrequency; }
 
     double process()
     {
         const double cents = keyErrorCents + drift.next() * driftCents;
         const double f = frequency * std::pow(2.0, cents / 1200.0);
+        effectiveFrequency = f;
         const double dt = juce::jmin(0.49, f / sampleRate);
         const double p = phase;
         double y = 0.0;
@@ -132,7 +136,9 @@ public:
                 sq += polyBlep(p, dt);
                 sq -= polyBlep(wrapped(p + 0.5), dt);
                 triState += 4.0 * dt * sq;
-                triState *= 0.999985;
+                // Correct the integrator toward the matching triangle, independently of pitch.
+                const double reference = 1.0 - 4.0 * std::abs(p - 0.5);
+                triState += (1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 2.0 / sampleRate)) * (reference - triState);
                 const double t = juce::jlimit(-1.18, 1.18, triState);
                 y = std::tanh(1.08 * t) / std::tanh(1.08);
                 break;
@@ -157,7 +163,7 @@ public:
     }
 
 private:
-    void resetStates() { triState = 0.0; edgeState = 0.0; }
+    void resetStates() { triState = 1.0 - 4.0 * std::abs(phase - 0.5); edgeState = 0.0; }
 
     static double wrapped(double x)
     {
@@ -183,55 +189,12 @@ private:
     }
 
     double sampleRate = 44100.0;
-    double phase = 0.0, frequency = 110.0, pw = 0.5;
+    double phase = 0.0, frequency = 110.0, effectiveFrequency = 110.0, pw = 0.5;
     double triState = 0.0, edgeState = 0.0;
     double driftCents = 2.0, keyErrorCents = 0.0;
     Wave wave = Wave::saw;
     SmoothRandom drift;
     std::mt19937 rng;
-};
-
-class AnalogADSR
-{
-public:
-    void prepare(double fs) { sampleRate = fs; reset(); }
-    void reset() { stage = Stage::idle; value = 0.0; }
-    void set(double a, double d, double s, double r)
-    {
-        attack = juce::jmax(0.0005, a);
-        decay = juce::jmax(0.002, d);
-        sustain = juce::jlimit(0.0, 1.0, s);
-        release = juce::jmax(0.002, r);
-    }
-    void noteOn() { stage = Stage::attack; }
-    void noteOff() { if (stage != Stage::idle) stage = Stage::release; }
-    double process()
-    {
-        switch (stage)
-        {
-            case Stage::idle: value = 0.0; break;
-            case Stage::attack:
-                value += (1.0 - value) * coeff(attack, 6.2);
-                if (value > 0.9994) { value = 1.0; stage = Stage::decay; }
-                break;
-            case Stage::decay:
-                value += (sustain - value) * coeff(decay, 5.2);
-                if (std::abs(value - sustain) < 1.0e-5) { value = sustain; stage = Stage::sustain; }
-                break;
-            case Stage::sustain:
-                value = sustain;
-                break;
-            case Stage::release:
-                value += (0.0 - value) * coeff(release, 5.2);
-                if (value < 1.0e-6) { value = 0.0; stage = Stage::idle; }
-                break;
-        }
-        return value;
-    }
-private:
-    double coeff(double seconds, double curve) const { return 1.0 - std::exp(-curve / (seconds * sampleRate)); }
-    enum class Stage { idle, attack, decay, sustain, release } stage = Stage::idle;
-    double sampleRate = 44100.0, attack = 0.01, decay = 0.2, sustain = 0.7, release = 0.3, value = 0.0;
 };
 
 class AnalogLFO
@@ -363,22 +326,23 @@ public:
         const double preGain = 1.0 + 10.0 * drive;
         const double input = warmClip(x * preGain) / std::sqrt(preGain);
 
-        // Zero-delay feedback approximation. State is NOT mutated while solving the loop.
-        double feedbackEstimate = state[3];
-        std::array<double,4> next = state;
-        double out = feedbackEstimate;
-
-        for (int iter = 0; iter < 5; ++iter)
+        // Solve the instantaneous feedback root with a safeguarded Newton iteration.
+        // The cascade is monotonic; [-1.1, 1.1] brackets its bounded output.
+        double lo = -1.1, hi = 1.1;
+        double estimate = juce::jlimit(lo, hi, state[3]);
+        std::array<double,4> next {};
+        double out = 0.0;
+        for (int iter = 0; iter < 12; ++iter)
         {
-            std::array<double,4> trial {};
-            double trialOut = 0.0;
-            evaluateCascade(input - k * feedbackEstimate, G, trial, trialOut);
-            feedbackEstimate += 0.72 * (trialOut - feedbackEstimate);
-            next = trial;
-            out = trialOut;
+            double slope = 0.0;
+            evaluateCascade(input - k * estimate, G, next, out, &slope);
+            const double error = estimate - out;
+            if (std::abs(error) < 1.0e-9) break;
+            if (error > 0.0) hi = estimate; else lo = estimate;
+            const double candidate = estimate - error / (1.0 + k * slope);
+            estimate = candidate > lo && candidate < hi ? candidate : 0.5 * (lo + hi);
         }
-
-        evaluateCascade(input - k * feedbackEstimate, G, next, out);
+        evaluateCascade(input - k * estimate, G, next, out);
         state = next;
 
         // Keep the natural bass loss of a resonant ladder, but not so much that it sounds thin.
@@ -394,8 +358,7 @@ public:
 private:
     static double warmClip(double x)
     {
-        const double z = x + 0.035 * x * x - 0.006 * x * x * x;
-        return std::tanh(z);
+        return saturateAsymmetric(x);
     }
 
     static double transistor(double x, double scale)
@@ -403,14 +366,16 @@ private:
         return std::tanh(x * scale);
     }
 
-    void evaluateCascade(double input, double G, std::array<double,4>& next, double& output) const
+    void evaluateCascade(double input, double G, std::array<double,4>& next, double& output, double* derivative = nullptr) const
     {
         static constexpr double stageScale[4] = { 1.000, 0.985, 1.012, 0.995 };
         double u = input;
+        double slope = 1.0;
 
         for (int i = 0; i < 4; ++i)
         {
             const double inN = transistor(u, stageScale[i]);
+            slope *= G * stageScale[i] * (1.0 - inN * inN);
             const double stN = transistor(state[(size_t)i], stageScale[i]);
             const double v = (inN - stN) * G;
             const double y = state[(size_t)i] + v;
@@ -418,6 +383,7 @@ private:
             u = y;
         }
         output = u;
+        if (derivative != nullptr) *derivative = slope;
     }
 
     double sampleRate = 44100.0;
@@ -469,22 +435,31 @@ public:
         filter.prepare(sampleRate);
         ampEnv.prepare(sampleRate);
         filterEnv.prepare(sampleRate);
-        outputDC.prepare(sampleRate);
+        outputDC.prepare(sampleRate); mixerDC.prepare(sampleRate);
         decimA.prepare();
         decimB.prepare();
         noiseRng.seed(0xdeadbeefu); keyRng.seed(0x13579bdu);
+        smoothingCoefficient = 1.0 - std::exp(-1.0 / (0.003 * sampleRate));
+        parametersInitialised = false;
         reset();
     }
 
     void reset()
     {
-        osc1.reset(); osc2.reset(); sub.reset(); lfo.reset(); filter.reset(); ampEnv.reset(); filterEnv.reset(); outputDC.reset();
+        osc1.reset(); osc2.reset(); sub.reset(); lfo.reset(); filter.reset(); ampEnv.reset(); filterEnv.reset(); outputDC.reset(); mixerDC.reset();
         decimA.reset(); decimB.reset();
         currentNote = -1; targetMidi = currentMidi = 60.0; heldNotes.clear();
+        heldNotes.ensureStorageAllocated(128);
         lastOutput = 0.0; lfoFadeValue = 1.0;
     }
 
-    void setParameters(const MonoParameters& p) { params = p; }
+    void setParameters(const MonoParameters& p)
+    {
+        params = p;
+        if (!parametersInitialised) { smoothed = p; parametersInitialised = true; }
+        ampEnv.set(p.ampAttack, p.ampDecay, p.ampSustain, p.ampRelease);
+        filterEnv.set(p.filterAttack, p.filterDecay, p.filterSustain, p.filterRelease);
+    }
 
     void noteOn(int note, float velocity)
     {
@@ -499,7 +474,7 @@ public:
         const double errAmount = juce::jlimit(0.0, 4.0, params.analogDriftCents * 0.55);
         osc1.setKeyErrorCents(keyErr(keyRng) * errAmount);
         osc2.setKeyErrorCents(keyErr(keyRng) * errAmount * 1.12);
-        sub.setKeyErrorCents(keyErr(keyRng) * errAmount * 0.08);
+        sub.setKeyErrorCents(0.0);
 
         const bool retrig = !hadHeldNotes || !params.legato || params.retrigger;
         if (retrig) { ampEnv.noteOn(); filterEnv.noteOn(); }
@@ -512,6 +487,8 @@ public:
 
     void noteOff(int note)
     {
+        if (!heldNotes.contains(note)) return;
+        const bool wasSelected = currentNote == note;
         heldNotes.removeAllInstancesOf(note);
         if (heldNotes.isEmpty())
         {
@@ -522,7 +499,7 @@ public:
         }
 
         selectPriorityNote();
-        if (!params.legato && params.retrigger)
+        if (wasSelected && (!params.legato || params.retrigger))
         {
             ampEnv.noteOn();
             filterEnv.noteOn();
@@ -563,70 +540,92 @@ private:
 
     double processOversampled()
     {
-        if (params.glideSeconds > 0.0)
+        MonoParameters p = params;
+        p.osc1Level = smoothed.osc1Level += smoothingCoefficient * (params.osc1Level - smoothed.osc1Level);
+        p.osc2Level = smoothed.osc2Level += smoothingCoefficient * (params.osc2Level - smoothed.osc2Level);
+        p.subLevel = smoothed.subLevel += smoothingCoefficient * (params.subLevel - smoothed.subLevel);
+        p.noiseLevel = smoothed.noiseLevel += smoothingCoefficient * (params.noiseLevel - smoothed.noiseLevel);
+        p.osc2DetuneCents = smoothed.osc2DetuneCents += smoothingCoefficient * (params.osc2DetuneCents - smoothed.osc2DetuneCents);
+        p.pulseWidth = smoothed.pulseWidth += smoothingCoefficient * (params.pulseWidth - smoothed.pulseWidth);
+        p.mixerDrive = smoothed.mixerDrive += smoothingCoefficient * (params.mixerDrive - smoothed.mixerDrive);
+        p.cutoffHz = smoothed.cutoffHz += smoothingCoefficient * (params.cutoffHz - smoothed.cutoffHz);
+        p.resonance = smoothed.resonance += smoothingCoefficient * (params.resonance - smoothed.resonance);
+        p.filterDrive = smoothed.filterDrive += smoothingCoefficient * (params.filterDrive - smoothed.filterDrive);
+        p.filterEnvOct = smoothed.filterEnvOct += smoothingCoefficient * (params.filterEnvOct - smoothed.filterEnvOct);
+        p.keyTrack = smoothed.keyTrack += smoothingCoefficient * (params.keyTrack - smoothed.keyTrack);
+        p.lfoPitchCents = smoothed.lfoPitchCents += smoothingCoefficient * (params.lfoPitchCents - smoothed.lfoPitchCents);
+        p.lfoFilterOct = smoothed.lfoFilterOct += smoothingCoefficient * (params.lfoFilterOct - smoothed.lfoFilterOct);
+        p.lfoPWM = smoothed.lfoPWM += smoothingCoefficient * (params.lfoPWM - smoothed.lfoPWM);
+        p.lfoAmp = smoothed.lfoAmp += smoothingCoefficient * (params.lfoAmp - smoothed.lfoAmp);
+        p.outputDrive = smoothed.outputDrive += smoothingCoefficient * (params.outputDrive - smoothed.outputDrive);
+        p.master = smoothed.master += smoothingCoefficient * (params.master - smoothed.master);
+        p.analogDriftCents = smoothed.analogDriftCents += smoothingCoefficient * (params.analogDriftCents - smoothed.analogDriftCents);
+        if (p.glideSeconds > 0.0)
         {
-            const double a = 1.0 - std::exp(-1.0 / (params.glideSeconds * sampleRate));
+            const double a = 1.0 - std::exp(-1.0 / (p.glideSeconds * sampleRate));
             currentMidi += (targetMidi - currentMidi) * a;
         }
         else currentMidi = targetMidi;
 
-        lfo.set(params.lfoRate, params.lfoWave);
+        lfo.set(p.lfoRate, p.lfoWave);
         const double l = lfo.process();
-        if (params.lfoFadeSeconds <= 0.0)
+        if (p.lfoFadeSeconds <= 0.0)
             lfoFadeValue = 1.0;
         else
-            lfoFadeValue = juce::jmin(1.0, lfoFadeValue + 1.0 / (params.lfoFadeSeconds * sampleRate));
+            lfoFadeValue = juce::jmin(1.0, lfoFadeValue + 1.0 / (p.lfoFadeSeconds * sampleRate));
         const double lf = l * lfoFadeValue;
-        const double pitchMod = lf * params.lfoPitchCents / 100.0;
+        const double pitchMod = lf * p.lfoPitchCents / 100.0;
         const double baseHz = 440.0 * std::pow(2.0, (currentMidi + pitchMod - 69.0) / 12.0);
 
-        osc1.setWave(params.osc1Wave); osc2.setWave(params.osc2Wave); sub.setWave(params.subWave);
-        const double modPW = juce::jlimit(0.05, 0.95, params.pulseWidth + lf * params.lfoPWM * 0.45);
+        osc1.setWave(p.osc1Wave); osc2.setWave(p.osc2Wave); sub.setWave(p.subWave);
+        const double modPW = juce::jlimit(0.05, 0.95, p.pulseWidth + lf * p.lfoPWM * 0.45);
         osc1.setPulseWidth(modPW); osc2.setPulseWidth(modPW);
-        osc1.setDriftCents(params.analogDriftCents);
-        osc2.setDriftCents(params.analogDriftCents * 1.13);
-        sub.setDriftCents(params.analogDriftCents * 0.12);
-        osc1.setFrequency(baseHz * std::pow(2.0, params.osc1Octave));
-        osc2.setFrequency(baseHz * std::pow(2.0, params.osc2Octave + params.osc2DetuneCents / 1200.0));
-        sub.setFrequency(baseHz * 0.5);
+        osc1.setDriftCents(p.analogDriftCents);
+        osc2.setDriftCents(p.analogDriftCents * 1.13);
+        sub.setDriftCents(0.0);
+        osc1.setFrequency(baseHz * std::pow(2.0, p.osc1Octave));
+        osc2.setFrequency(baseHz * std::pow(2.0, p.osc2Octave + p.osc2DetuneCents / 1200.0));
+        sub.setFrequency(baseHz * std::pow(2.0, p.osc1Octave - 1));
 
         const double n = noiseDist(noiseRng);
-        double mix = params.osc1Level * osc1.process()
-                   + params.osc2Level * osc2.process()
-                   + params.subLevel  * sub.process()
-                   + params.noiseLevel * n;
+        const double vco1 = osc1.process();
+        sub.setFrequency(osc1.getLastFrequency() * 0.5);
+        double mix = p.osc1Level * vco1
+                   + p.osc2Level * osc2.process()
+                   + p.subLevel  * sub.process()
+                   + p.noiseLevel * n;
 
-        const double mixGain = 1.0 + 6.5 * params.mixerDrive;
-        const double mixerBiased = mix + 0.018 * mix * mix;
-        mix = saturateAsymmetric(mixerBiased * mixGain) / std::sqrt(mixGain);
+        // Retain headroom at low channel levels; saturation grows with the summed level.
+        const double mixGain = 0.65 + 4.5 * p.mixerDrive;
+        mix = mixerDC.process(saturateAsymmetric(mix * mixGain) / std::sqrt(juce::jmax(1.0, mixGain)));
 
-        filterEnv.set(params.filterAttack, params.filterDecay, params.filterSustain, params.filterRelease);
-        ampEnv.set(params.ampAttack, params.ampDecay, params.ampSustain, params.ampRelease);
         const double fe = filterEnv.process();
         const double ae = ampEnv.process();
 
-        filter.setParams(params.cutoffHz, params.resonance, params.filterDrive, params.keyTrack, currentMidi);
-        double y = filter.process(mix, fe * params.filterEnvOct + lf * params.lfoFilterOct);
+        filter.setParams(p.cutoffHz, p.resonance, p.filterDrive, p.keyTrack, currentMidi);
+        double y = filter.process(mix, fe * p.filterEnvOct + lf * p.lfoFilterOct);
 
-        const double tremolo = 1.0 - params.lfoAmp * 0.5 * (lf + 1.0);
+        const double tremolo = 1.0 - p.lfoAmp * 0.5 * (lf + 1.0);
         const double vca = y * ae * velocityGain * tremolo;
         const double vcaBiased = vca + 0.012 * vca * vca;
         y = saturateAsymmetric(vcaBiased * 1.28) / 1.12;
 
-        const double outGain = 1.0 + 8.0 * params.outputDrive;
+        const double outGain = 1.0 + 8.0 * p.outputDrive;
         y = saturateAsymmetric(y * outGain) / std::sqrt(outGain);
-        y = outputDC.process(y) * params.master;
+        y = outputDC.process(y) * p.master;
         return y;
     }
 
     double hostRate = 44100.0, sampleRate = 176400.0;
     int osFactor = 4;
-    MonoParameters params;
+    MonoParameters params, smoothed;
+    double smoothingCoefficient = 0.001;
+    bool parametersInitialised = false;
     BandLimitedOscillator osc1, osc2, sub;
     AnalogLFO lfo;
     NonlinearLadder filter;
     AnalogADSR ampEnv, filterEnv;
-    DCBlocker outputDC;
+    DCBlocker outputDC, mixerDC;
     HalfBandDecimator2x decimA, decimB;
     juce::Array<int> heldNotes;
     int currentNote = -1;
@@ -638,3 +637,4 @@ private:
 };
 
 } // namespace jerzy
+

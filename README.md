@@ -41,3 +41,50 @@ Po instalacji wykonaj ponowne skanowanie w FL Studio.
 
 ## CI
 Workflow `.github/workflows/build-windows.yml` buduje Windows x64 VST3 na `main` i publikuje artefakt `Jerzy-Mono-Analog-Grid-Windows-VST3`.
+
+
+## 0.3.0 — analog signal path and envelope repair
+
+This is an original analog-inspired instrument, not a component-accurate emulation
+of Moog, Bass Station II or Circuit Mono Station. It keeps the existing Grid/ARP
+and host parameter IDs. Existing presets load, but intentionally sound different.
+
+- Free-running PolyBLEP VCOs; triangle integrator starts at the correct phase level
+  and uses a rate-independent DC correction. Sub pitch follows OSC1 including octave
+  and drift, at half its instantaneous frequency (independent initial phase).
+- Summed channel levels drive a bounded, monotonic asymmetric mixer saturator with
+  DC removal. High input no longer causes polynomial foldback. Filter and output
+  drive remain separate sound-shaping stages.
+- Four-pole nonlinear ladder with safeguarded Newton feedback solve, rather than
+  fixed-point relaxation that can fail at high cutoff/resonance.
+- Main timbral controls have 3 ms smoothing; VCOs continue running across note gates.
+- Amp and filter ADSR reach their stage endpoints at the displayed durations
+  (rounded to an internal sample). Attack charges toward 120%; decay/release use
+  a small target overshoot. Retrigger preserves the current capacitor level.
+  Live time edits scale the remaining stage duration without resetting amplitude.
+- GUI plots the same capacitor curves and actual A/D/S/R settings. Its time axis
+  uses a 250 ms sustain hold for illustration; actual sustain lasts until note-off.
+  Wider editable sliders show milliseconds/seconds and sustain percentage.
+  Window resizing preserves the panel aspect ratio, including the ARP extension.
+- Unknown note-offs no longer trigger envelopes; note-priority fallback correctly
+  retriggers in non-legato mode. Held-note storage is reserved during preparation.
+
+### Validation
+
+CTest `MonoDSP` checks ADSR endpoints and retrigger at 44.1/48/96 kHz,
+triangle DC and amplitude at 27.5/110/880 Hz, extreme ladder settings,
+full voice output/release, and saturator monotonicity. Windows CI runs these
+checks before packaging VST3. Run locally after configuring/building:
+
+```sh
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Design references:
+- [Minimoog Model D manual](https://api.moogmusic.com/sites/default/files/2018-01/Minimoog_Model_D_Manual.pdf)
+- [Bass Station II signal path, mixer and envelope documentation](https://userguides.novationmusic.com/hc/en-gb/articles/25494313827986-Bass-Station-II-in-detail)
+- [Circuit Mono Station](https://eu.novationmusic.com/products/circuit-mono-station)
+
+Suggested next extension: a selectable multimode filter (12/24 dB LP, HP, BP)
+plus independent modulation-envelope routing to pitch/PWM. The current release
+concentrates on making the existing ladder, oscillator mixer and two ADSRs reliable.
