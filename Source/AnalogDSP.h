@@ -573,7 +573,8 @@ public:
                 }
             }
         }
-        return (float)juce::jlimit(-1.0, 1.0, bOut);
+        // Keep floating-point headroom for the output drive and post-synth FX.
+        return (float)bOut;
     }
 
 private:
@@ -650,9 +651,13 @@ private:
                    + p.subLevel  * sub.process()
                    + p.noiseLevel * n;
 
-        // Retain headroom at low channel levels; saturation grows with the summed level.
-        const double mixGain = 0.65 + 4.5 * p.mixerDrive;
-        mix = mixerDC.process(saturateAsymmetric(mix * mixGain) / std::sqrt(juce::jmax(1.0, mixGain)));
+        // Mixer drive is a real pre-filter gain stage. Blend from clean at zero
+        // to progressively harder transistor clipping without compensating away
+        // the added harmonics and level.
+        const double mixDrive = 1.0 + 7.0 * juce::jlimit(0.0, 1.0, p.mixerDrive);
+        const double drivenMix = saturateAsymmetric(mix * mixDrive);
+        mix += juce::jlimit(0.0, 1.0, p.mixerDrive) * (drivenMix - mix);
+        mix = mixerDC.process(mix);
 
         filter.setParams(p.cutoffHz, p.resonance, p.filterDrive, p.keyTrack, currentMidi);
         const double filterMod = fe * p.filterEnvOct + lf * p.lfoFilterOct;
@@ -673,8 +678,13 @@ private:
         const double vcaBiased = vca + 0.012 * vca * vca;
         y = saturateAsymmetric(vcaBiased * 1.28) / 1.12;
 
-        const double outGain = 1.0 + 8.0 * p.outputDrive;
-        y = saturateAsymmetric(y * outGain) / std::sqrt(outGain);
+        // Output drive has a true neutral setting, then blends toward a clipped
+        // amplifier stage. Avoid square-root level compensation: that made the
+        // old drive sound quieter as it saturated.
+        const double outAmount=juce::jlimit(0.0,1.0,p.outputDrive);
+        const double outGain=std::pow(10.0,(18.0*outAmount)/20.0);
+        const double drivenOut=saturateAsymmetric(y*outGain);
+        y += outAmount*(drivenOut-y);
         y = outputDC.process(y) * p.master;
         return y;
     }
@@ -702,4 +712,3 @@ private:
 };
 
 } // namespace jerzy
-

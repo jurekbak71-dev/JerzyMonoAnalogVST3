@@ -63,6 +63,7 @@ private:
     int arpStep = 0;
     int arpCurrentNote = -1;
     int arpUpDownPos = 0;
+    int arpLastRandomIndex = -1;
     juce::Array<int> arpHeldNotes;
     juce::Array<int> arpLatchedNotes;
     juce::Array<int> physicalHeldNotes;
@@ -86,5 +87,9 @@ private:
     int lastArpHostStep = -1;
     int lastGridHostStep = -1;
     int gridCurrentNote = -1;
+    int gridRatchetCount = 1;
+    int gridRatchetIndex = 0;
+    int gridStepNote = -1;
+    bool gridStepActive = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)
 };

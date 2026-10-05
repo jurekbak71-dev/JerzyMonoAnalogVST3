@@ -52,13 +52,13 @@ public:
     }
     void process(juce::AudioBuffer<float>& b, const juce::AudioProcessorValueTreeState& state, double bpm)
     {
-        if (b.getNumChannels()<2 || b.getNumSamples()==0) return;
+        if (b.getNumChannels()<1 || b.getNumSamples()==0) return;
+        const bool stereo=b.getNumChannels()>1;
         auto v=[&](const char* id){auto* p=state.getRawParameterValue(id); return p?p->load(std::memory_order_relaxed):0.0f;};
-        const int n=b.getNumSamples(); float* l=b.getWritePointer(0); float* r=b.getWritePointer(1);
+        const int n=b.getNumSamples(); float* l=b.getWritePointer(0); float* r=stereo?b.getWritePointer(1):l;
         const float threshold=v("fxCompThreshold"), ratio=juce::jmax(1.0f,v("fxCompRatio"));
         const float compAttack=(float)std::exp(-1.0/(sampleRate*juce::jmax(0.0005f,v("fxCompAttack"))));
         const float compRelease=(float)std::exp(-1.0/(sampleRate*juce::jmax(0.005f,v("fxCompRelease"))));
-        const float drive=1.0f+v("fxCompDrive")*14.0f;
         const int delayDiv=(int)v("fxDelayDivision"), delayMode=(int)v("fxDelayMode");
         static constexpr double q[]={4.0,2.0,1.0,0.5,0.25,0.125,2.0/3.0,1.0/3.0,1.0/6.0,1.5,0.75,0.375};
         const int delaySamples=juce::jlimit(1,(int)delayL.size()-1,(int)(sampleRate*60.0/juce::jmax(20.0,bpm)*q[juce::jlimit(0,11,delayDiv)]));
@@ -77,6 +77,9 @@ public:
         {
             const int effect=chain[(size_t)slot];
             if(v(enabledIds[effect])<0.5f) continue;
+            // The linked compressor also works on a mono instrument bus.
+            // Stereo-only spatial effects remain bypassed on mono layouts.
+            if(!stereo && effect!=0) continue;
             switch(effect)
             {
                 case 0:
@@ -86,9 +89,20 @@ public:
                         const float c=peak>compEnvelope?compAttack:compRelease;
                         compEnvelope=c*compEnvelope+(1.0f-c)*peak;
                         const float db=juce::Decibels::gainToDecibels(juce::jmax(1.0e-7f,compEnvelope));
-                        const float over=juce::jmax(0.0f,db-threshold);
-                        const float gain=juce::Decibels::decibelsToGain(-over*(1.0f-1.0f/ratio));
-                        const float norm=std::tanh(drive);l[i]=(norm>0.0f?std::tanh(l[i]*drive)/norm:l[i])*gain; r[i]=(norm>0.0f?std::tanh(r[i]*drive)/norm:r[i])*gain;
+                        constexpr float knee=6.0f;
+                        const float above=db-threshold;
+                        float reductionDb=0.0f;
+                        if(above>knee*0.5f) reductionDb=-above*(1.0f-1.0f/ratio);
+                        else if(above>-knee*0.5f) reductionDb=-(above+knee*0.5f)*(above+knee*0.5f)/(2.0f*knee)*(1.0f-1.0f/ratio);
+                        // Conservative automatic makeup restores body after compression.
+                        const float makeupDb=juce::jlimit(0.0f,6.0f,-threshold*(1.0f-1.0f/ratio)*0.18f);
+                        const float gain=juce::Decibels::decibelsToGain(reductionDb+makeupDb);
+                        const float amount=juce::jlimit(0.0f,1.0f,v("fxCompDrive"));
+                        const float pre=1.0f+amount*9.0f;
+                        const float dryL=l[i],dryR=r[i];
+                        const float colourL=std::tanh(dryL*pre),colourR=std::tanh(dryR*pre);
+                        l[i]=(dryL+(colourL-dryL)*amount)*gain;
+                        r[i]=(dryR+(colourR-dryR)*amount)*gain;
                     } break;
                 case 1:
                     for(int i=0;i<n;++i)
