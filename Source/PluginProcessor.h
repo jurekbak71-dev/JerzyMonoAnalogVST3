@@ -72,6 +72,8 @@ private:
     std::atomic<int> gridMode { 0 };
     std::atomic<int> gridBank { 0 };
     std::atomic<int> gridRootNote { 48 };
+    std::atomic<int> gridTriggerNote { 48 };
+    double gridHostPpqOrigin = 0.0;
     std::atomic<int> gridActiveBanks { 8 };
     std::atomic<bool> gridMidiRunning { false };
     std::atomic<int> gridMidiHeldCount { 0 };

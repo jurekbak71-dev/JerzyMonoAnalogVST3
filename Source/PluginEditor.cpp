@@ -231,38 +231,64 @@ void MonoFxPanel::refreshOrder()
 
 void MonoFxPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(C(0xff050607));auto bounds=getLocalBounds().toFloat().reduced(4.0f);
+    g.fillAll(C(0xff050607));
+    const int cardW=(getWidth()-32)/3,cardH=(getHeight()-72)/2;
     const char* titles[6]={"01  COMPRESSOR / LIMITER + DRIVE","02  TEMPO DELAY","03  STEREO REVERB","04  MID / SIDE WIDTH","05  JUNO CHORUS / FLANGER","06  ROTARY SPEAKER"};
     for(int i=0;i<6;++i)
     {
-        const int col=i%3,row=i/3;auto r=juce::Rectangle<float>(bounds.getX()+col*bounds.getWidth()/3.0f,bounds.getY()+68.0f+row*(bounds.getHeight()-68.0f)/2.0f,bounds.getWidth()/3.0f-8.0f,(bounds.getHeight()-68.0f)/2.0f-8.0f);
+        const int col=i%3,row=i/3;
+        auto r=juce::Rectangle<float>((float)(8+col*(cardW+8)),(float)(56+row*(cardH+8)),(float)cardW,(float)cardH);
         g.setColour(C(PANEL));g.fillRoundedRectangle(r,5.0f);g.setColour(C(EDGE));g.drawRoundedRectangle(r,5.0f,1.2f);
-        auto hd=r.removeFromTop(34.0f).reduced(8.0f,2.0f);g.setColour(lcdBg);g.fillRoundedRectangle(hd,2.0f);g.setColour(lcdText);
-        g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),11.0f,juce::Font::bold)));
-        g.drawFittedText(titles[i],hd.toNearestInt().reduced(4,0),juce::Justification::centredLeft,1);
+        auto hd=r.removeFromTop(28.0f).reduced(7.0f,2.0f);g.setColour(lcdBg);g.fillRoundedRectangle(hd,2.0f);g.setColour(lcdText);
+        g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jlimit(8.0f,11.0f,(float)cardW*0.024f),juce::Font::bold)));
+        g.drawFittedText(titles[i],hd.toNearestInt().reduced(3,0),juce::Justification::centredLeft,1);
     }
 }
+
 void MonoFxPanel::resized()
 {
-    auto r=getLocalBounds();const int cardW=(r.getWidth()-20)/3, cardH=(r.getHeight()-76)/2;
-    orderSlot.setBounds(14,12,150,30);moveUp.setBounds(174,12,94,30);moveDown.setBounds(274,12,112,30);chainLabel.setBounds(400,12,r.getWidth()-414,30);
+    const auto area=getLocalBounds();
+    const int width=area.getWidth(),height=area.getHeight();
+    constexpr int margin=8,gap=8,topBar=48;
+    const int cardW=(width-2*margin-2*gap)/3;
+    const int cardH=(height-topBar-2*margin-gap)/2;
+    const int controlH=juce::jmin(112,cardH-64);
+    const int knobLabelH=15;
+    orderSlot.setBounds(10,9,112,30);moveUp.setBounds(130,9,82,30);moveDown.setBounds(220,9,96,30);
+    chainLabel.setBounds(326,9,juce::jmax(0,width-336),30);
     for(int i=0;i<6;++i)
     {
-        const int x=10+(i%3)*cardW,y=74+(i/3)*cardH;
-        enabled[(size_t)i].setBounds(x+12,y+38,cardW-24,28);
+        const int col=i%3,row=i/3;
+        const int x=margin+col*(cardW+gap),y=topBar+margin+row*(cardH+gap);
+        enabled[(size_t)i].setBounds(x+6,y+31,cardW-12,24);
     }
-    auto knob=[&](int index,int x,int y,int w){knobLabels[(size_t)index].setBounds(x,y,w,18);knobs[(size_t)index].setBounds(x,y+18,w,82);};
-    const int colX[3]={10,10+cardW,10+2*cardW};
-    int x=colX[0],y=112;
-    for(int k=0;k<5;++k)knob(k,x+8+k*82,y+40,78);
-    modes[0].setBounds(colX[1]+16,154,140,28);modes[1].setBounds(colX[1]+168,154,140,28);
-    knob(5,colX[1]+55,190,95);knob(6,colX[1]+205,190,95);
-    knob(7,colX[2]+42,150,95);knob(8,colX[2]+164,150,95);knob(9,colX[2]+286,150,95);
-    knob(10,colX[0]+160,cardH+148,100);
-    modes[2].setBounds(colX[1]+14,cardH+148,120,28);
-    for(int k=11;k<=14;++k)knob(k,colX[1]+12+(k-11)*91,cardH+182,84);
-    rotarySync.setBounds(colX[2]+18,cardH+148,145,30);modes[3].setBounds(colX[2]+174,cardH+148,145,30);
-    knob(15,colX[2]+90,cardH+190,90);knob(16,colX[2]+220,cardH+190,90);
+    auto knob=[&](int index,int x,int y,int w,int h)
+    {
+        h=juce::jmax(68,h);
+        knobLabels[(size_t)index].setBounds(x,y,w,knobLabelH);
+        knobs[(size_t)index].setTextBoxStyle(juce::Slider::TextBoxBelow,false,juce::jmax(42,w-4),16);
+        knobs[(size_t)index].setBounds(x,y+knobLabelH,w,h-knobLabelH);
+    };
+    const int controlY=topBar+margin+31+24+4;
+    const int secondY=controlY+29;
+    const int usableAfterCombo=juce::jmax(68,controlH-29);
+    const int x0=margin,x1=margin+cardW+gap,x2=margin+2*(cardW+gap);
+    const int fiveW=(cardW-18)/5;
+    for(int k=0;k<5;++k)knob(k,x0+4+k*(fiveW+2),controlY,fiveW,controlH);
+    const int comboW=(cardW-30)/2;
+    modes[0].setBounds(x1+6,controlY,comboW,25);modes[1].setBounds(x1+18+comboW,controlY,comboW,25);
+    const int pairW=(cardW-32)/2;
+    knob(5,x1+8,secondY,pairW,usableAfterCombo);knob(6,x1+24+pairW,secondY,pairW,usableAfterCombo);
+    const int triW=(cardW-30)/3;
+    for(int k=0;k<3;++k)knob(7+k,x2+6+k*(triW+6),controlY,triW,controlH);
+    knob(10,x0+(cardW-116)/2,controlY,116,controlH);
+    modes[2].setBounds(x1+6,controlY,(cardW-18),25);
+    const int fourW=(cardW-28)/4;
+    for(int k=0;k<4;++k)knob(11+k,x1+4+k*(fourW+4),secondY,fourW,usableAfterCombo);
+    const int rotaryComboW=(cardW-30)/2;
+    rotarySync.setBounds(x2+6,controlY,rotaryComboW,25);
+    modes[3].setBounds(x2+18+rotaryComboW,controlY,rotaryComboW,25);
+    knob(15,x2+8,secondY,pairW,usableAfterCombo);knob(16,x2+24+pairW,secondY,pairW,usableAfterCombo);
 }
 
 void JerzyMonoAnalogAudioProcessorEditor::OutputMeter::paint(juce::Graphics& g)
@@ -303,6 +329,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupCombo(gridBanks,{"1 BANK / 8 STEPS","2 BANKS / 16 STEPS","3 BANKS / 24 STEPS","4 BANKS / 32 STEPS","5 BANKS / 40 STEPS","6 BANKS / 48 STEPS","7 BANKS / 56 STEPS","8 BANKS / 64 STEPS"});
     setupKnob(gridGate,"GATE","",0.75);
     setupCombo(gridDirection,{"FORWARD","REVERSE","PING-PONG","RANDOM"});
+    setupCombo(gridOctave,{"-2 OCT","-1 OCT","0 OCT","+1 OCT","+2 OCT"});
     setupKnob(gridSwing,"SWING","",0.0);setupKnob(gridVelocity,"VELOCITY","",0.95);
     setupKnob(arpSwing,"SWING","",0.0);setupKnob(arpVelocity,"VELOCITY","",0.9);
     gridModeButton.setButtonText("MODE: SEQ");
@@ -381,6 +408,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     gridScaleA=std::make_unique<ComboAttachment>(s,"gridScale",gridScale);
     gridBanksA=std::make_unique<ComboAttachment>(s,"gridBanks",gridBanks);
     gridDirectionA=std::make_unique<ComboAttachment>(s,"gridDirection",gridDirection);
+    gridOctaveA=std::make_unique<ComboAttachment>(s,"gridOctave",gridOctave);
     gridGateA=std::make_unique<SliderAttachment>(s,"gridGate",gridGate);
     gridSwingA=std::make_unique<SliderAttachment>(s,"gridSwing",gridSwing);
     gridVelocityA=std::make_unique<SliderAttachment>(s,"gridVelocity",gridVelocity);
@@ -536,6 +564,7 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
         drawLabelBox(g,"PLAY",165,178,120);
         drawLabelBox(g,"MIDI START / GATE",305,178,150);
         drawLabelBox(g,"EDIT",475,178,150);
+        drawLabelBox(g,"OCTAVE",1195,112,180);
     }
 }
 
@@ -557,7 +586,7 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
         place(gridDivision,515,132,145,34);
         place(gridScale,675,132,160,34);
         place(gridRoot,850,132,130,34);
-    place(gridDirection,1000,132,180,34);
+    place(gridDirection,1000,132,180,34);place(gridOctave,1195,132,180,34);
 
         place(gridGate,35,194,110,52);
         place(gridSeqOn,165,198,120,34);
@@ -621,7 +650,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
     pageButton.setButtonText(padsPage?"FX":(fxPage?"SYNTH":"PADS"));
     setSynthControlsVisible(!padsPage&&!fxPage);
     for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                 (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid})
+                 (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridOctave,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid})
         c->setVisible(padsPage);
     fxPanel.setVisible(fxPage);
     const int w=getWidth();

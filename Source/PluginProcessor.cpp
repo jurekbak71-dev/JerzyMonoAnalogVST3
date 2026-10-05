@@ -96,7 +96,11 @@ int JerzyMonoAnalogAudioProcessor::gridNoteForRow(int row) const
     };
     const int scale = juce::jlimit(0,7,getChoiceIndex("gridScale"));
     const int degree = juce::jlimit(0,7,7-row);
-    return juce::jlimit(0,127,gridRootMidiFromChoice()+scales[scale][degree]);
+    const int gridRoot=gridRootMidiFromChoice();
+    const bool midiTranspose=apvts.getRawParameterValue("gridMidiTrigger")->load()>0.5f && gridMidiRunning.load();
+    const int base=midiTranspose?gridTriggerNote.load():gridRoot;
+    const int octave=getChoiceIndex("gridOctave")-2;
+    return juce::jlimit(0,127,base+scales[scale][degree]+12*octave);
 }
 
 void JerzyMonoAnalogAudioProcessor::launchPadNoteOn(int padIndex)
@@ -146,7 +150,8 @@ void JerzyMonoAnalogAudioProcessor::processGridSequencerSample(double bpm, int s
     bool gridHostStepChanged=false;
     if(hostSync && hostHasPpq)
     {
-        const int hostStep=(int)std::floor((hostPpq+1.0e-9)/stepQuarter);
+        const double origin=(midiTrigger && gridMidiRunning.load())?gridHostPpqOrigin:0.0;
+        const int hostStep=(int)std::floor((hostPpq-origin+1.0e-9)/stepQuarter);
         if(hostStep!=lastGridHostStep){lastGridHostStep=hostStep;gridGlobalStep=juce::jmax(0,hostStep)%totalSteps;gridSamplesToNext=stepSamples;gridHostStepChanged=true;}
     }
     const double gate=juce::jlimit(0.05f,0.98f,apvts.getRawParameterValue("gridGate")->load());
@@ -393,6 +398,9 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                         physicalHeldNotes.add(note);
                     gridMidiHeldCount.store(physicalHeldNotes.size());
                     gridMidiRunning.store(true);
+                    gridTriggerNote.store(note);
+                    gridHostPpqOrigin=samplePpq;
+                    lastGridHostStep=-1;
                     if(gridCurrentNote>=0){
                         engine.noteOff(gridCurrentNote);
                         generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),s);
@@ -437,6 +445,18 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                             gridCurrentNote=-1;
                         }
                         gridPlayColumn.store(-1);
+                    }
+                    else
+                    {
+                        gridTriggerNote.store(physicalHeldNotes.getLast());
+                        gridHostPpqOrigin=samplePpq;
+                        lastGridHostStep=-1;
+                        gridGlobalStep=0;gridSamplesToNext=0.0;
+                        if(gridCurrentNote>=0){
+                            engine.noteOff(gridCurrentNote);
+                            generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),s);
+                            gridCurrentNote=-1;
+                        }
                     }
                 }
                 else
@@ -556,11 +576,12 @@ void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
         if(st.hasProperty("fxOrder")){auto tokens=juce::StringArray::fromTokens(st["fxOrder"].toString(),",","");std::array<int,MonoFxChain::count> order{0,1,2,3,4,5};if(tokens.size()==MonoFxChain::count){for(int i=0;i<MonoFxChain::count;++i)order[(size_t)i]=tokens[i].getIntValue();fxChain.setOrder(order);}st.removeProperty("fxOrder",nullptr);}
         // An old preset must reset destinations added in 0.4 instead of inheriting
         // whatever the previously loaded preset left in the current processor.
-        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth"})
+        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth", "gridOctave"})
         {
             if(!st.getChildWithProperty("id",id).isValid())
             {
-                const float defaultValue = juce::String(id)=="fxCompThreshold" ? -18.0f
+                const float defaultValue = juce::String(id)=="gridOctave" ? 2.0f
+                                         : juce::String(id)=="fxCompThreshold" ? -18.0f
                                          : juce::String(id)=="fxCompRatio" ? 4.0f
                                          : juce::String(id)=="fxCompAttack" ? 0.01f
                                          : juce::String(id)=="fxCompRelease" ? 0.12f
@@ -683,6 +704,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<C>("fxRotaryDivision","FX Rotary Division",juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},4));
     l.add(std::make_unique<P>("fxRotaryRate","FX Rotary Rate",0.1f,8.0f,1.0f));
     l.add(std::make_unique<P>("fxRotaryDepth","FX Rotary Depth",0.0f,1.0f,0.6f));
+    l.add(std::make_unique<C>("gridOctave","Grid Octave",juce::StringArray{"-2 oct","-1 oct","0 oct","+1 oct","+2 oct"},2));
     return l;
 }
 

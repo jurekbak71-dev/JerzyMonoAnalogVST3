@@ -126,7 +126,7 @@ private:
     juce::TextButton pageButton;
     juce::ToggleButton gridSeqOn,gridMidiTrigger,gridHostSync;
     juce::TextButton gridModeButton,gridClearButton;
-    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection;
+    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection,gridOctave;
     ResetSlider gridGate,gridSwing,gridVelocity;
     PadGrid padGrid;
     MonoFxPanel fxPanel;
@@ -149,7 +149,7 @@ private:
 
     std::unique_ptr<ComboAttachment> osc1WaveA,osc1OctA,osc2WaveA,osc2OctA,subWaveA,lfoWaveA,lfoDivisionA,glideModeA,priorityA;
     std::unique_ptr<ComboAttachment> arpDivisionA,arpPatternA,arpRhythmA,arpOctavesA;
-    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA;
+    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA,gridOctaveA;
     std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
     std::unique_ptr<ComboAttachment> filterModeA;
     std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
