@@ -78,6 +78,32 @@ int main() {
         s.next(p,.5);check(s.stepPosition()==1,"eighth-note step");s.next(p,3.5);check(s.stepPosition()==7,"7/8 wrap timeline");
         p.restart=true;s.noteOn(43,1,1,p,4.1);s.next(p,4.1);check(s.stepPosition()==0,"root restart anchor");
     }
+    // Check routing with sample-for-sample comparisons, not only parameter storage.
+    auto compareRacks=[](Parameters a,Parameters b) {
+        Instrument x,y;x.prepare(48000);y.prepare(48000);
+        x.noteOn(48,1,1,a,0);y.noteOn(48,1,1,b,0);double difference=0;
+        for(int i=0;i<24000;++i) {
+            auto u=x.next(a,double(i)/24000),v=y.next(b,double(i)/24000);
+            difference+=std::abs(u.l-v.l)+std::abs(u.r-v.r);
+        }
+        return difference;
+    };
+    {
+        Parameters a;a.direct=true;a.bassFX=1;auto b=a;
+        b.padRack.fxSaturation=1;b.padRack.order={{5,4,3,2,1,0}};
+        check(compareRacks(a,b)==0,"ambient rack cannot change solo bass");
+        a.bass=false;a.pad=true;a.padAttack=.05;b=a;b.fxSaturation=1;b.order={{5,4,3,2,1,0}};
+        check(compareRacks(a,b)==0,"bass rack cannot change solo ambient");
+        b=a;b.padRack.fxSaturation=1;
+        check(compareRacks(a,b)>.1,"ambient FX controls affect ambient audio");
+        a=Parameters{};a.direct=true;b=a;b.masterRack.fxSaturation=1;
+        check(compareRacks(a,b)==0,"master amount zero is dry");
+        a.masterFX=1;b=a;b.masterRack.fxSaturation=1;
+        check(compareRacks(a,b)>.1,"master rack affects layer sum");
+        a.pad=true;a.padAttack=.05;a.masterRack.fxGrain=true;a.masterRack.freeze=true;
+        b=a;b.masterRack.order={{5,4,3,2,1,0}};
+        check(std::isfinite(compareRacks(a,b)),"three racks granular freeze remain finite");
+    }
     // CPU sanity benchmark, release build only: report, don't depend on machine speed.
     Instrument s;s.prepare(48000);p=Parameters{};p.pad=true;p.fxGrain=true;s.noteOn(36,1,1,p,0);double ppq=0;
     auto start=std::chrono::steady_clock::now();auto total=energy(s,p,48000,48000,ppq);

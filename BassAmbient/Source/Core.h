@@ -15,7 +15,18 @@ inline double unit(uint32_t seed, uint32_t index) { return double(hash(seed ^ ha
 inline double smooth(double a, double b, double t) { t = clamp(t, 0.0, 1.0); return a + (b-a)*t*t*(3.0-2.0*t); }
 struct Stereo { double l=0, r=0; Stereo operator+(Stereo b) const { return {l+b.l,r+b.r}; } Stereo operator*(double g) const { return {l*g,r*g}; } };
 
-struct Parameters {
+struct FXParameters {
+    bool fxDrive=true, fxChorus=true, fxDelay=true, fxGrain=false, fxReverb=true, fxWidth=true, freeze=false;
+    std::array<int,6> order{{0,1,2,3,4,5}};
+    double compThreshold=-18, compRatio=3, compAttack=.015, compRelease=.15, compMakeup=0, fxSaturation=.2;
+    double chorusMix=.2, chorusRate=.3, chorusDepth=.5; int chorusMode=0;
+    double delayMix=.2, feedback=.35, delayTone=4500, wow=.15, flutter=.12, damage=0;
+    int delayMode=2, delayDivision=2, delayType=1;
+    double grainSize=.15, grainMix=.3, grainPitch=0, grainScatter=.4;
+    double reverbMix=.25, reverbSize=.7, reverbDamp=.5, width=1;
+};
+
+struct Parameters : FXParameters {
     bool bass=true, pad=false, direct=false, latch=false, restart=false, evolve=false, legato=false;
     int model=0, bassWave=0, style=0, scale=1, division=2, bars=1, meter=0, numerator=4, denominator=4;
     int seed=71, chord=1, padMode=1, engine1=0, engine2=1;
@@ -23,16 +34,11 @@ struct Parameters {
     double bassLevel=.6, cutoff=1200, resonance=.35, filterEnv=.65, drive=.2;
     double bassAttack=.003, bassDecay=.25, bassSustain=.25, bassRelease=.1, glide=.09, sub=.3, pulse=.5;
     double padLevel=.35, padAttack=2, padDecay=3, padSustain=.8, padRelease=5, padCutoff=2600;
-    double padBlend=.5, padDrift=.25, motion=.4, evolution=4, spread=.7, grainSize=.15;
-    double bassFX=.15, padFX=1, master=.65;
-    bool fxDrive=true, fxChorus=true, fxDelay=true, fxGrain=false, fxReverb=true, fxWidth=true, freeze=false, limiter=true;
-    std::array<int,6> order{{0,1,2,3,4,5}};
-    double compThreshold=-18, compRatio=3, compAttack=.015, compRelease=.15, compMakeup=0, fxSaturation=.2;
-    double chorusMix=.2, chorusRate=.3, chorusDepth=.5; int chorusMode=0;
-    double delayMix=.2, feedback=.35, delayTone=4500, wow=.15, flutter=.12, damage=0;
-    int delayMode=2, delayDivision=2, delayType=1;
-    double grainMix=.3, grainPitch=0, grainScatter=.4;
-    double reverbMix=.25, reverbSize=.7, reverbDamp=.5, width=1;
+    double padBlend=.5, padDrift=.25, motion=.4, evolution=4, spread=.7;
+    double bassFX=.15, padFX=1, master=.65, masterFX=0;
+    bool limiter=true;
+    FXParameters padRack, masterRack;
+
 };
 
 class Envelope {
@@ -198,8 +204,8 @@ struct PadVoice {
         double cents=p.padDrift*(random*7+std::sin(age*.17+pan)*3);
         double x=0;
         for(int i=0;i<2;++i) {
-            double x1=engine(a,p.engine1,hz(note+bend+cents/100),sr*2,modulation,p.grainSize);
-            double x2=engine(b,p.engine2,hz(note+bend-cents/120+.045),sr*2,-modulation,p.grainSize);
+            double x1=engine(a,p.engine1,hz(note+bend+cents/100),sr*2,modulation,p.padRack.grainSize);
+            double x2=engine(b,p.engine2,hz(note+bend-cents/120+.045),sr*2,-modulation,p.padRack.grainSize);
             double mix=x1*(1-p.padBlend)+x2*p.padBlend;
             x+=fl.process(mix,p.padCutoff*std::exp2(modulation*2),.12,sr*2,.12);
         }
@@ -235,7 +241,7 @@ class FXRack {
     std::array<double,4> grainPhase{{0,.25,.5,.75}};
     double grainAvailable=0;
     static constexpr std::array<double,8> roomSeconds{{.0297,.0371,.0411,.0437,.0307,.0353,.0399,.0479}};
-    Stereo driveFX(Stereo x,const Parameters& p) {
+    Stereo driveFX(Stereo x,const FXParameters& p) {
         double level=std::max(std::abs(x.l),std::abs(x.r));
         double tau=level>detector?p.compAttack:p.compRelease;
         detector+=(level-detector)*(1-std::exp(-1/(sr*std::max(.0001,tau))));
@@ -247,7 +253,7 @@ class FXRack {
         double amount=1+p.fxSaturation*5;
         return {std::tanh(x.l*gain*amount)/std::sqrt(amount),std::tanh(x.r*gain*amount)/std::sqrt(amount)};
     }
-    Stereo chorusFX(Stereo x,const Parameters& p) {
+    Stereo chorusFX(Stereo x,const FXParameters& p) {
         double base=p.chorusMode==1?.002:.012;
         double depth=(p.chorusMode==1?.0017:.004)*p.chorusDepth;
         double rate=p.chorusMode==2?.65:p.chorusRate;
@@ -257,7 +263,7 @@ class FXRack {
         chorusL.push(x.l+(p.chorusMode==1?wet.l*.45:0));chorusR.push(x.r+(p.chorusMode==1?wet.r*.45:0));
         return x*(1-p.chorusMix)+wet*p.chorusMix;
     }
-    Stereo delayFX(Stereo x,const Parameters& p,double bpm) {
+    Stereo delayFX(Stereo x,const FXParameters& p,double bpm) {
         double target=divisionBeats(p.delayDivision)*60/bpm*sr;
         delayTime+=(target-delayTime)*.0005;
         double wander=smooth(unit(710,uint32_t(clock/2)),unit(710,uint32_t(clock/2)+1),std::fmod(clock/2,1.0))*2-1;
@@ -274,7 +280,7 @@ class FXRack {
         else { delayL.push(colour(x.l+wet.l*p.feedback));delayR.push(colour(x.r+wet.r*p.feedback)); }
         return x*(1-p.delayMix)+wet*p.delayMix;
     }
-    Stereo grainFX(Stereo x,const Parameters& p) {
+    Stereo grainFX(Stereo x,const FXParameters& p) {
         if(!p.freeze) { grainL.push(x.l);grainR.push(x.r);grainAvailable=std::min(grainAvailable+1,sr*3.5); }
         double length=std::max(64.0,p.grainSize*sr),ratio=std::exp2(p.grainPitch/12);
         Stereo wet{}; double total=0;
@@ -290,7 +296,7 @@ class FXRack {
         if(grainAvailable<sr*.05) wet={};
         return x*(1-p.grainMix)+wet*(p.grainMix/std::max(total,.001));
     }
-    Stereo reverbFX(Stereo x,const Parameters& p) {
+    Stereo reverbFX(Stereo x,const FXParameters& p) {
         std::array<double,8> out{};
         double sum=0;
         for(size_t k=0;k<8;++k) {
@@ -318,7 +324,7 @@ public:
         damp.fill(0);clock=detector=delayLpf=delayRpf=grainAvailable=0;delayTime=sr*.25;
         grainPhase={{0,.25,.5,.75}};
     }
-    Stereo process(Stereo x,const Parameters& p,double bpm) {
+    Stereo process(Stereo x,const FXParameters& p,double bpm) {
         clock+=1/sr;std::array<bool,6> used{};
         // Sanitize automated permutations: no repeated processing or omitted FX.
         std::array<int,6> valid{};int n=0;
@@ -350,7 +356,7 @@ class Instrument {
     uint32_t voiceSerial=0;
     BassVoice bass;
     std::array<PadVoice,12> pads;
-    FXRack bassRack,padRack;
+    FXRack bassRack,padRack,masterRack;
     double dcInL=0,dcInR=0,dcOutL=0,dcOutR=0;
     void startPad(const Parameters& p,bool replace) {
         if(replace) for(auto& v:pads) v.off();
@@ -388,11 +394,11 @@ class Instrument {
         } else if(latest) velocity=latest->velocity;
     }
 public:
-    void prepare(double sr) { rate=sr;bass.prepare(sr);for(auto& v:pads)v.prepare(sr);bassRack.prepare(sr);padRack.prepare(sr);reset(); }
+    void prepare(double sr) { rate=sr;bass.prepare(sr);for(auto& v:pads)v.prepare(sr);bassRack.prepare(sr);padRack.prepare(sr);masterRack.prepare(sr);reset(); }
     void reset() {
         held={};sustain.fill(false);bend.fill(0);serial=0;root=-1;rootChannel=1;bass.reset();
         for(auto& v:pads) { v.env.reset();v.fl.reset();v.fr.reset();v.a={};v.b={};v.age=0; }
-        bassRack.reset();padRack.reset();lastStep=std::numeric_limits<int64_t>::min();previousSlide=false;
+        bassRack.reset();padRack.reset();masterRack.reset();lastStep=std::numeric_limits<int64_t>::min();previousSlide=false;
         anchor=padClock=0;gateUntil=-1;havePosition=wasPlaying=false;voiceSerial=0;dcInL=dcInR=dcOutL=dcOutR=0;
         previousBass=true;previousPad=false;previousDirect=false;
     }
@@ -485,10 +491,12 @@ public:
         dryPad=dryPad*p.padLevel;
         // Both racks always advance, including after NOTE OFF, so tails remain audible.
         Stereo processedBass=bassRack.process(p.bass?dryBass:Stereo{},p,bpm);
-        Stereo processedPad=padRack.process(p.pad?dryPad:Stereo{},p,bpm);
+        Stereo processedPad=padRack.process(p.pad?dryPad:Stereo{},p.padRack,bpm);
         Stereo out=(p.bass?dryBass*(1-p.bassFX)+processedBass*p.bassFX:Stereo{})+
                    (p.pad?dryPad*(1-p.padFX)+processedPad*p.padFX:Stereo{});
-        out=out*p.master;
+        // Master is after the layer sum, before output level / peak guard.
+        auto processedMaster=masterRack.process(out,p.masterRack,bpm);
+        out=(out*(1-p.masterFX)+processedMaster*p.masterFX)*p.master;
         const double dcCoefficient=std::exp(-2*pi*5/rate);
         double l=out.l-dcInL+dcCoefficient*dcOutL,r=out.r-dcInR+dcCoefficient*dcOutR;
         dcInL=out.l;dcInR=out.r;dcOutL=l;dcOutR=r;

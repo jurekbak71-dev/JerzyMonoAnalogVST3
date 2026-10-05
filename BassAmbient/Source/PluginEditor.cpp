@@ -78,74 +78,140 @@ public:
 };
 
 class BassAmbientEditor::Page final : public juce::Component {
-    BassAmbientProcessor& processor;int group;
-    std::vector<std::unique_ptr<Control>> controls;
-    std::array<juce::Label,6> fxLabels;
-    std::array<juce::TextButton,6> left,right;
-    juce::Label description;
+    BassAmbientProcessor& processor;
+    int index, selectedModule=0;
+    juce::String prefix;
+    struct Item { std::unique_ptr<Control> control; int module=-1; };
+    std::vector<Item> controls;
+    std::array<juce::TextButton,6> modules, left, right;
+    juce::Label description, generatorHeading;
+    int generatorStart=-1;
+    bool isFX() const { return index>=2; }
     void swapSlots(int a,int b) {
         if(b<0||b>=6) return;
-        auto* pa=processor.state.getParameter("order"+juce::String(a));
-        auto* pb=processor.state.getParameter("order"+juce::String(b));
+        auto* pa=processor.state.getParameter(prefix+"order"+juce::String(a));
+        auto* pb=processor.state.getParameter(prefix+"order"+juce::String(b));
         float va=pa->getValue(),vb=pb->getValue();
-        pa->beginChangeGesture();pb->beginChangeGesture();pa->setValueNotifyingHost(vb);pb->setValueNotifyingHost(va);pa->endChangeGesture();pb->endChangeGesture();
-        updateOrder();
+        pa->beginChangeGesture();pb->beginChangeGesture();
+        pa->setValueNotifyingHost(vb);pb->setValueNotifyingHost(va);
+        pa->endChangeGesture();pb->endChangeGesture();updateOrder();
+    }
+    int slotModule(int slot) const {
+        return juce::jlimit(0,5,int(processor.state.getRawParameterValue(prefix+"order"+juce::String(slot))->load()));
     }
 public:
-    Page(BassAmbientProcessor& p,int index):processor(p),group(index) {
-        static constexpr const char* descriptions[]{
-            "Analog-inspired bass voices. 303 accent / slide, tuned 808, dual-oscillator classic bass.",
-            "A held Piano Roll note supplies the root. DIRECT bypasses the phrase generator. Scale belongs to this instrument.",
-            "Two engines per voice. HOLD sustains, FLOW overlaps chords, KRELL creates evolving textures.",
-            "Output FX for both layers. Move modules with arrows. Bass and pad have independent FX amounts.",
-            "Layer FX amounts and final output safety. Soft limiter is a saturating peak guard, not a look-ahead limiter."};
-        description.setText(descriptions[index],juce::dontSendNotification);description.setColour(juce::Label::textColourId,muted);addAndMakeVisible(description);
-        for(const auto& s:parameterSpecs()) if(s.group==index&&!s.id.startsWith("order")) {
-            auto control=std::make_unique<Control>(processor,s);addAndMakeVisible(*control);controls.push_back(std::move(control));
+    std::function<void()> layoutChanged;
+    Page(BassAmbientProcessor& p,int page):processor(p),index(page),prefix(page==3?"pad_":page==4?"master_":"") {
+        const char* descriptions[]{
+            "BASS: synth controls, followed by the MIDI phrase generator. One Piano Roll note supplies the root.",
+            "AMBIENT: two engines per voice, overlapping envelopes and HOLD / FLOW / KRELL. Shared scale and seed below.",
+            "BASS FX: independent processing before the layer sum. Select a module to edit; arrows change its position.",
+            "AMBIENT FX: independent processing before the layer sum. Select a module to edit; arrows change its position.",
+            "MASTER FX: processes the combined layers, before output level and soft limiter. Amount 0 = dry master."};
+        description.setText(descriptions[page],juce::dontSendNotification);
+        description.setColour(juce::Label::textColourId,muted);addAndMakeVisible(description);
+        generatorHeading.setText("PHRASE GENERATOR / MIDI",juce::dontSendNotification);
+        generatorHeading.setColour(juce::Label::textColourId,accent);
+        if(index==0) addAndMakeVisible(generatorHeading);
+        int module=-1;
+        for(auto spec:parameterSpecs()) {
+            bool include=false;int itemModule=-1;
+            if(index==0) include=spec.group==0||spec.group==1;
+            else if(index==1) include=spec.group==2||spec.id=="scale"||spec.id=="seed";
+            else {
+                const bool own=prefix.isEmpty()?(!spec.id.startsWith("pad_")&&!spec.id.startsWith("master_")):spec.id.startsWith(prefix);
+                if(spec.group==3&&own) {
+                    auto id=spec.id.substring(prefix.length());
+                    if(id.startsWith("order")) continue;
+                    if(id=="fxDrive") module=0;
+                    if(id=="fxChorus") module=1;
+                    if(id=="fxDelay") module=2;
+                    if(id=="fxGrain") module=3;
+                    if(id=="fxReverb") module=4;
+                    if(id=="fxWidth") module=5;
+                    itemModule=module;include=true;
+                    if(index==3) spec.label=spec.label.fromFirstOccurrenceOf("Ambient ",false,false);
+                    if(index==4) spec.label=spec.label.fromFirstOccurrenceOf("Master ",false,false);
+                }
+                include|=spec.id==(index==2?"bassFX":index==3?"padFX":"masterFX");
+                if(index==4) include|=spec.id=="master"||spec.id=="limiter";
+            }
+            if(!include) continue;
+            if(index==0&&spec.group==1&&generatorStart<0) generatorStart=int(controls.size());
+            auto control=std::make_unique<Control>(processor,spec);
+            control->setComponentID(spec.id);addAndMakeVisible(*control);
+            controls.push_back({std::move(control),itemModule});
         }
-        if(group==3) for(int k=0;k<6;++k) {
-            addAndMakeVisible(fxLabels[size_t(k)]);fxLabels[size_t(k)].setJustificationType(juce::Justification::centred);
+        if(isFX()) for(int k=0;k<6;++k) {
+            addAndMakeVisible(modules[size_t(k)]);
+            modules[size_t(k)].onClick=[this,k] {
+                selectedModule=slotModule(k);updateOrder();
+                if(layoutChanged) layoutChanged();
+            };
             left[size_t(k)].setButtonText("<");right[size_t(k)].setButtonText(">");
             addAndMakeVisible(left[size_t(k)]);addAndMakeVisible(right[size_t(k)]);
-            left[size_t(k)].onClick=[this,k]{swapSlots(k,k-1);};right[size_t(k)].onClick=[this,k]{swapSlots(k,k+1);};
+            left[size_t(k)].onClick=[this,k]{swapSlots(k,k-1);};
+            right[size_t(k)].onClick=[this,k]{swapSlots(k,k+1);};
             left[size_t(k)].setEnabled(k>0);right[size_t(k)].setEnabled(k<5);
         }
         updateOrder();
     }
     void updateOrder() {
-        if(group!=3) return;
+        if(!isFX()) return;
         const char* names[]{"DRIVE / COMP","CHORUS","DELAY","GRANULAR","REVERB","WIDTH"};
-        auto p=processor.readParameters();
-        for(int k=0;k<6;++k) fxLabels[size_t(k)].setText(juce::String(k+1)+"  "+names[juce::jlimit(0,5,p.order[size_t(k)])],juce::dontSendNotification);
+        for(int k=0;k<6;++k) {
+            const int id=slotModule(k);
+            modules[size_t(k)].setButtonText(juce::String(k+1)+"  "+names[id]);
+            modules[size_t(k)].setToggleState(id==selectedModule,juce::dontSendNotification);
+        }
     }
-    int requiredHeight(int width) const {
-        int columns=std::max(3,width/155);
-        return 50+(group==3?80:0)+int((controls.size()+size_t(columns)-1)/size_t(columns))*148;
+    int arrange(int width,bool apply) {
+        const int columns=std::max(3,width/155),cell=width/columns;
+        int top=isFX()?130:50,count=0;
+        for(size_t k=0;k<controls.size();++k) {
+            if(int(k)==generatorStart) {
+                top+=((count+columns-1)/columns)*148;
+                if(apply) generatorHeading.setBounds(12,top,width-24,36);
+                top+=40;count=0;
+            }
+            auto& item=controls[k];bool visible=!isFX()||item.module<0||item.module==selectedModule;
+            if(apply) item.control->setVisible(visible);
+            if(!visible) continue;
+            if(apply) item.control->setBounds((count%columns)*cell,top+(count/columns)*148,cell,142);
+            ++count;
+        }
+        return top+((count+columns-1)/columns)*148;
     }
+    int requiredHeight(int width) { return arrange(width,false); }
     void resized() override {
         description.setBounds(10,0,getWidth()-20,44);
-        int top=50;
-        if(group==3) {
-            int w=getWidth()/6;
+        if(isFX()) {
+            const int w=getWidth()/6;
             for(int k=0;k<6;++k) {
-                int x=k*w;fxLabels[size_t(k)].setBounds(x+2,top,w-4,30);
-                left[size_t(k)].setBounds(x+10,top+33,(w-24)/2,25);
-                right[size_t(k)].setBounds(x+14+(w-24)/2,top+33,(w-24)/2,25);
+                const int x=k*w;
+                modules[size_t(k)].setBounds(x+2,50,w-4,34);
+                left[size_t(k)].setBounds(x+10,88,(w-24)/2,25);
+                right[size_t(k)].setBounds(x+14+(w-24)/2,88,(w-24)/2,25);
             }
-            top+=80;
         }
-        int columns=std::max(3,getWidth()/155),width=getWidth()/columns;
-        for(size_t k=0;k<controls.size();++k) controls[k]->setBounds(int(k%size_t(columns))*width,top+int(k/size_t(columns))*148,width,142);
+        arrange(getWidth(),true);
     }
 };
 
 BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEditor(p),processor(p),theme(std::make_unique<Theme>()) {
     setLookAndFeel(theme.get());
-    const char* names[]{"BASS","GENERATOR","AMBIENT","FX RACK","OUTPUT"};
-    for(int k=0;k<5;++k) {
+    const char* names[]{"BASS","AMBIENT","FX"};
+    for(int k=0;k<3;++k) {
         tabs[size_t(k)].setButtonText(names[k]);tabs[size_t(k)].onClick=[this,k]{selectPage(k);};addAndMakeVisible(tabs[size_t(k)]);
-        pages[size_t(k)]=std::make_unique<Page>(processor,k);
     }
+    for(int k=0;k<5;++k) {
+        pages[size_t(k)]=std::make_unique<Page>(processor,k);
+        pages[size_t(k)]->layoutChanged=[this]{resized();};
+    }
+    rackSelector.addItemList({"BASS rack","AMBIENT rack","MASTER rack"},1);
+    rackSelector.setComponentID("rackSelector");rackSelector.setSelectedId(1,juce::dontSendNotification);
+    rackSelector.onChange=[this] { selectedRack=rackSelector.getSelectedId()-1;selectPage(2); };
+    addAndMakeVisible(rackSelector);
     addAndMakeVisible(viewport);viewport.setScrollBarsShown(true,false);viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
     presets.addItemList({"Italo Analog","Acid Machine","808 Foundation","Lush Flow","Krell Dust","Bass + Atmosphere"},1);
     presets.setText("Factory scenes",juce::dontSendNotification);presets.onChange=[this]{processor.applyPreset(presets.getSelectedId()-1);};addAndMakeVisible(presets);
@@ -161,27 +227,30 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
     setSize(1040,740);selectPage(0);startTimerHz(20);
 }
 BassAmbientEditor::~BassAmbientEditor() { stopTimer();viewport.setViewedComponent(nullptr,false);setLookAndFeel(nullptr); }
+BassAmbientEditor::Page& BassAmbientEditor::currentPage() { return *pages[size_t(selected==2?2+selectedRack:selected)]; }
 void BassAmbientEditor::selectPage(int index) {
-    selected=index;for(int k=0;k<5;++k) tabs[size_t(k)].setToggleState(k==index,juce::dontSendNotification);
-    viewport.setViewedComponent(pages[size_t(index)].get(),false);resized();viewport.setViewPosition(0,0);
+    selected=index;for(int k=0;k<3;++k) tabs[size_t(k)].setToggleState(k==index,juce::dontSendNotification);
+    rackSelector.setVisible(index==2);
+    viewport.setViewedComponent(&currentPage(),false);resized();viewport.setViewPosition(0,0);
 }
 void BassAmbientEditor::paint(juce::Graphics& g) {
     g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
     g.drawText("JERZY  /  BASS AMBIENT",20,12,330,35,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12)));
-    g.drawText("0.1.0  •  PIANO ROLL ROOT  •  HOST SYNC",22,47,340,20,juce::Justification::centredLeft);
+    g.drawText("0.2.0  •  PIANO ROLL ROOT  •  HOST SYNC",22,47,340,20,juce::Justification::centredLeft);
 }
 void BassAmbientEditor::resized() {
     presets.setBounds(getWidth()-460,22,220,34);mutate.setBounds(getWidth()-228,22,100,34);panic.setBounds(getWidth()-116,22,96,34);
-    int tabWidth=(getWidth()-40)/5;for(int k=0;k<5;++k) tabs[size_t(k)].setBounds(20+k*tabWidth,80,tabWidth-6,38);
+    int tabWidth=(getWidth()-260)/3;for(int k=0;k<3;++k) tabs[size_t(k)].setBounds(20+k*tabWidth,80,tabWidth-6,38);
+    rackSelector.setBounds(getWidth()-232,80,212,38);
     viewport.setBounds(16,130,getWidth()-32,getHeight()-174);
-    auto& page=*pages[size_t(selected)];int w=viewport.getWidth()-18;page.setSize(w,page.requiredHeight(w));
+    auto& page=currentPage();int w=viewport.getWidth()-18;page.setSize(w,page.requiredHeight(w));page.resized();
     status.setBounds(20,getHeight()-36,getWidth()-40,26);
 }
 void BassAmbientEditor::timerCallback() {
     int root=processor.rootDisplay.load();float level=processor.peak.load();
     juce::String note=root<0?"—":juce::MidiMessage::getMidiNoteName(root,true,true,3);
     juce::String db=level<.00001f?"−inf":juce::String(juce::Decibels::gainToDecibels(level),1);
-    status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Double-click knob: reset    |    FX tab: scroll for all processors",juce::dontSendNotification);
-    pages[3]->updateOrder();
+    status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Double-click knob: reset    |    FX: choose rack, then module",juce::dontSendNotification);
+    for(int k=2;k<5;++k) pages[size_t(k)]->updateOrder();
 }

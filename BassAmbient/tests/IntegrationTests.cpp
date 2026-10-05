@@ -30,31 +30,82 @@ int main() {
         require(processor.state.getRawParameterValue("seed")->load()==4321,"seed state restore");
         require(processor.readParameters().order[0]==4,"FX order state restore");
         for(int k=0;k<6;++k) { processor.applyPreset(k);auto p=processor.readParameters();require(p.seed==71,"factory preset complete reset"); }
-        // Actual vector GUI snapshots at minimum, default and large sizes.
+        set("delayMix",.11f);set("pad_delayMix",.37f);set("master_delayMix",.61f);
+        set("pad_order0",4);set("pad_order4",0);set("masterFX",.7f);
+        processor.getStateInformation(state);processor.applyPreset(0);
+        processor.setStateInformation(state.getData(),int(state.getSize()));
+        auto racks=processor.readParameters();
+        require(std::abs(racks.delayMix-.11)<1e-5&&std::abs(racks.padRack.delayMix-.37)<1e-5&&std::abs(racks.masterRack.delayMix-.61)<1e-5,"three independent FX states");
+        require(racks.padRack.order[0]==4&&racks.order[0]==0&&racks.masterRack.order[0]==0,"three independent FX orders");
+        // Rebuild an authentic schema-1 tree: only legacy IDs, shared settings.
+        auto old=processor.state.copyState();old.setProperty("schemaVersion",1,nullptr);
+        for(int i=old.getNumChildren()-1;i>=0;--i) {
+            auto id=old.getChild(i).getProperty("id").toString();
+            if(id.startsWith("pad_")||id.startsWith("master_")||id=="masterFX") old.removeChild(i,nullptr);
+        }
+        juce::MemoryBlock legacy;auto xml=old.createXml();juce::AudioProcessor::copyXmlToBinary(*xml,legacy);
+        processor.setStateInformation(legacy.getData(),int(legacy.getSize()));racks=processor.readParameters();
+        require(std::abs(racks.padRack.delayMix-racks.delayMix)<1e-6&&racks.masterFX==0,"legacy shared FX migration with dry master");
+        processor.applyPreset(0);
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        auto tab=[&](const juce::String& name) {
+            for(int i=0;i<editor->getNumChildComponents();++i)
+                if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i)))
+                    if(button->getButtonText()==name&&button->onClick) {button->onClick();return;}
+            throw std::runtime_error("main page missing");
+        };
+        juce::ComboBox* selector=nullptr;
+        for(int i=0;i<editor->getNumChildComponents();++i)
+            if(editor->getChildComponent(i)->getComponentID()=="rackSelector") selector=dynamic_cast<juce::ComboBox*>(editor->getChildComponent(i));
+        require(selector!=nullptr,"FX rack selector missing");
+        auto snapshot=[&](const juce::String& suffix) {
+            auto image=editor->createComponentSnapshot(editor->getLocalBounds(),true,1);
+            require(image.isValid()&&image.getWidth()==editor->getWidth()&&image.getHeight()==editor->getHeight(),"resizable GUI snapshot");
+            auto stream=juce::File::getCurrentWorkingDirectory().getChildFile("gui-"+suffix+".png").createOutputStream();
+            require(stream!=nullptr,"GUI snapshot output");juce::PNGImageFormat png;
+            require(png.writeImageToStream(image,*stream),"GUI PNG encoding");
+        };
         const std::array<std::pair<int,int>,3> sizes{{{840,600},{1040,740},{1440,1000}}};
         for(const auto& size:sizes) {
             editor->setSize(size.first,size.second);
-            auto image=editor->createComponentSnapshot(editor->getLocalBounds(),true,1);
-            require(image.isValid()&&image.getWidth()==size.first&&image.getHeight()==size.second,"resizable GUI snapshot");
-            auto file=juce::File::getCurrentWorkingDirectory().getChildFile("gui-"+juce::String(size.first)+".png");
-            auto stream=file.createOutputStream();require(stream!=nullptr,"GUI snapshot output");
-            juce::PNGImageFormat png;require(png.writeImageToStream(image,*stream),"GUI PNG encoding");
-        }
-        editor->setSize(1040,740);
-        for(const auto& tab:juce::StringArray{"AMBIENT","FX RACK"}) {
-            bool found=false;
-            for(int i=0;i<editor->getNumChildComponents();++i) if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i))) {
-                if(button->getButtonText()==tab&&button->onClick) {button->onClick();found=true;break;}
+            for(const auto& name:juce::StringArray{"BASS","AMBIENT","FX"}) {
+                tab(name);require(selector->isVisible()==(name=="FX"),"rack selector visibility");
+                if(name!="FX") snapshot(name+"-"+juce::String(size.first));
+                else for(int rack=1;rack<=3;++rack) {
+                    selector->setSelectedId(rack,juce::sendNotificationSync);
+                    snapshot("FX-"+juce::String(rack)+"-"+juce::String(size.first));
+                }
             }
-            require(found,"ambient / FX tab navigation");
-            auto image=editor->createComponentSnapshot(editor->getLocalBounds(),true,1);
-            auto file=juce::File::getCurrentWorkingDirectory().getChildFile("gui-"+tab.removeCharacters(" ")+".png");
-            auto stream=file.createOutputStream();require(stream!=nullptr,"tab PNG output");
-            juce::PNGImageFormat png;require(png.writeImageToStream(image,*stream),"tab PNG encoding");
         }
+        // Reordering one rack through its actual GUI leaves the others untouched.
+        tab("FX");selector->setSelectedId(2,juce::sendNotificationSync);
+        juce::Viewport* viewport=nullptr;
+        for(int i=0;i<editor->getNumChildComponents();++i)
+            if(auto* v=dynamic_cast<juce::Viewport*>(editor->getChildComponent(i))) viewport=v;
+        require(viewport!=nullptr,"page viewport");auto* page=viewport->getViewedComponent();
+        bool moved=false;
+        for(int i=0;i<page->getNumChildComponents();++i)
+            if(auto* button=dynamic_cast<juce::TextButton*>(page->getChildComponent(i)))
+                if(button->getButtonText()==">"&&button->isEnabled()) {button->onClick();moved=true;break;}
+        racks=processor.readParameters();require(moved&&racks.padRack.order[0]==1&&racks.padRack.order[1]==0&&racks.order[0]==0&&racks.masterRack.order[0]==0,"GUI independent rack reorder");
+        bool delaySelected=false;
+        for(int i=0;i<page->getNumChildComponents();++i)
+            if(auto* button=dynamic_cast<juce::TextButton*>(page->getChildComponent(i)))
+                if(button->getButtonText().contains("DELAY")) {button->onClick();delaySelected=true;break;}
+        require(delaySelected,"FX module navigation");
+        bool attached=false;
+        for(int i=0;i<page->getNumChildComponents();++i) {
+            auto* control=page->getChildComponent(i);
+            if(control->getComponentID()=="pad_delayMix") {
+                require(control->isVisible(),"selected module control visible");
+                for(int k=0;k<control->getNumChildComponents();++k)
+                    if(auto* slider=dynamic_cast<juce::Slider*>(control->getChildComponent(k))) {slider->setValue(.63,juce::sendNotificationSync);attached=true;}
+            }
+        }
+        racks=processor.readParameters();require(attached&&std::abs(racks.padRack.delayMix-.63)<1e-5&&std::abs(racks.delayMix-.2)<1e-5,"rack GUI connected to correct DSP parameters");
+        snapshot("AMBIENT-DELAY");
         processor.releaseResources();processor.setPlayHead(nullptr);
-        std::cout<<"PASS host MIDI offsets, parameter bindings, preset/state restore, FX order and GUI at 3 sizes\n";
+        std::cout<<"PASS MIDI, three-rack routing state, legacy migration, GUI attachments, reorder and 15 page/rack snapshots\n";
         return 0;
     } catch(const std::exception& e) { std::cerr<<"FAIL: "<<e.what()<<"\n";return 1; }
 }

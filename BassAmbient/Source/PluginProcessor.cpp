@@ -17,6 +17,14 @@ std::vector<ParameterSpec> parameterSpecs() {
 #undef CHOICE
 #undef CHOICE_DEN
     for(int i=0;i<6;++i) out.push_back({"order"+juce::String(i),"FX slot "+juce::String(i+1),3,3,0,0,double(i),1,choices("Drive / Comp|Chorus|Delay|Granular|Reverb|Width")});
+    // Keep original FX IDs for BASS; append independent AMBIENT and MASTER IDs.
+    const auto original=out;
+    for(const auto& prefix:juce::StringArray{"pad_","master_"}) for(auto spec:original) if(spec.group==3) {
+        spec.id=prefix+spec.id;
+        spec.label=(prefix=="pad_"?"Ambient ":"Master ")+spec.label;
+        out.push_back(std::move(spec));
+    }
+    out.push_back({"masterFX","Master FX amount",4,0,0,1,0,1,{}});
     return out;
 }
 
@@ -52,6 +60,17 @@ jerzy::Parameters BassAmbientProcessor::readParameters() const {
 #undef CHOICE
 #undef CHOICE_DEN
     for(int k=0;k<6;++k) p.order[size_t(k)]=int(std::lround(values[i++]->load()));
+    for(auto* rack:{&p.padRack,&p.masterRack}) {
+#define BOOL(f,l,g) rack->f=values[i++]->load()>.5f;
+#define FLOAT(f,a,b,s,l,g) rack->f=values[i++]->load();
+#define CHOICE(f,l,g,c) rack->f=int(std::lround(values[i++]->load()));
+#include "FXParameters.def"
+#undef BOOL
+#undef FLOAT
+#undef CHOICE
+        for(int k=0;k<6;++k) rack->order[size_t(k)]=int(std::lround(values[i++]->load()));
+    }
+    p.masterFX=values[i++]->load();
     return p;
 }
 
@@ -79,6 +98,21 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 #undef INT
 #undef CHOICE
 #undef CHOICE_DEN
+    current.padRack=previous.padRack;current.masterRack=previous.masterRack;
+    // Adopt discrete fields immediately, retaining only continuous values for the ramp.
+    for(int rack=0;rack<2;++rack) {
+        auto& c=rack==0?current.padRack:current.masterRack;
+        const auto& t=rack==0?target.padRack:target.masterRack;
+#define BOOL(f,l,g) c.f=t.f;
+#define FLOAT(f,a,b,s,l,g)
+#define CHOICE(f,l,g,c_) c.f=t.f;
+#include "FXParameters.def"
+#undef BOOL
+#undef FLOAT
+#undef CHOICE
+        c.order=t.order;
+    }
+    current.masterFX=previous.masterFX;
     double tempo=120,ppq=localPPQ;bool playing=false;int num=4,den=4;
     if(auto* head=getPlayHead()) if(auto position=head->getPosition()) {
         if(auto t=position->getBpm()) tempo=*t;
@@ -103,6 +137,18 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 #undef INT
 #undef CHOICE
 #undef CHOICE_DEN
+        for(int rack=0;rack<2;++rack) {
+            auto& c=rack==0?current.padRack:current.masterRack;
+            const auto& t=rack==0?target.padRack:target.masterRack;
+#define BOOL(f,l,g)
+#define FLOAT(f,a,b,s,l,g) c.f+=(t.f-c.f)*smoothing;
+#define CHOICE(f,l,g,c_)
+#include "FXParameters.def"
+#undef BOOL
+#undef FLOAT
+#undef CHOICE
+        }
+        current.masterFX+=(target.masterFX-current.masterFX)*smoothing;
         const double position=ppq+sample*increment;
         while(event!=end&&(*event).samplePosition<=sample) {
             auto m=(*event).getMessage();int ch=m.getChannel();
@@ -122,12 +168,27 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 }
 
 void BassAmbientProcessor::getStateInformation(juce::MemoryBlock& output) {
-    auto tree=state.copyState();tree.setProperty("schemaVersion",1,nullptr);
+    auto tree=state.copyState();tree.setProperty("schemaVersion",2,nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,output);
 }
 void BassAmbientProcessor::setStateInformation(const void* data,int size) {
     if(auto xml=getXmlFromBinary(data,size)) if(xml->hasTagName(state.state.getType())) {
-        state.replaceState(juce::ValueTree::fromXml(*xml));resetRequested=true;
+        auto tree=juce::ValueTree::fromXml(*xml);
+        // Old sessions used a shared FX configuration: duplicate it to AMBIENT.
+        if(int(tree.getProperty("schemaVersion",1))<2) {
+            for(const auto& spec:parameterSpecs()) if(spec.id.startsWith("pad_")) {
+                const auto source=tree.getChildWithProperty("id",spec.id.substring(4));
+                auto copy=source.isValid()?source.createCopy():juce::ValueTree("PARAM");
+                copy.setProperty("id",spec.id,nullptr);
+                if(!source.isValid()) copy.setProperty("value",spec.initial,nullptr);
+                tree.appendChild(copy,nullptr);
+            }
+            for(const auto& spec:parameterSpecs()) if(spec.id.startsWith("master_")||spec.id=="masterFX") {
+                juce::ValueTree child("PARAM");child.setProperty("id",spec.id,nullptr);
+                child.setProperty("value",spec.initial,nullptr);tree.appendChild(child,nullptr);
+            }
+        }
+        state.replaceState(tree);resetRequested=true;
     }
 }
 void BassAmbientProcessor::applyPreset(int preset) {
@@ -139,8 +200,8 @@ void BassAmbientProcessor::applyPreset(int preset) {
     if(preset==0) { set("style",0);set("model",2);set("cutoff",1800);set("density",.85f); }
     if(preset==1) { set("style",2);set("model",0);set("slide",.5f);set("resonance",.7f);set("cutoff",700);set("bassFX",.25f); }
     if(preset==2) { set("style",4);set("model",1);set("bassDecay",.8f);set("bassSustain",.65f);set("bassRelease",.3f);set("drive",.4f); }
-    if(preset==3) { set("bass",0);set("pad",1);set("padMode",1);set("engine1",0);set("engine2",2);set("reverbMix",.5f);set("padAttack",3);set("padRelease",9); }
-    if(preset==4) { set("bass",0);set("pad",1);set("padMode",2);set("engine1",3);set("engine2",4);set("fxGrain",1);set("grainPitch",7);set("damage",.35f);set("motion",.7f); }
+    if(preset==3) { set("bass",0);set("pad",1);set("padMode",1);set("engine1",0);set("engine2",2);set("pad_reverbMix",.5f);set("padAttack",3);set("padRelease",9); }
+    if(preset==4) { set("bass",0);set("pad",1);set("padMode",2);set("engine1",3);set("engine2",4);set("pad_fxGrain",1);set("pad_grainPitch",7);set("pad_damage",.35f);set("motion",.7f); }
     if(preset==5) { set("bass",1);set("pad",1);set("model",2);set("padLevel",.25f);set("padAttack",4);set("padRelease",8); }
     resetRequested=true;
 }

@@ -1,4 +1,4 @@
-# Jerzy Bass Ambient 0.1.0
+# Jerzy Bass Ambient 0.2.0
 
 Osobny instrument VST3 / Standalone dla Windows x64, prototyp do odsłuchu w FL Studio.
 Nie zastępuje Mono Analog Grid: inna nazwa, identyfikator VST3 i osobny projekt CMake.
@@ -11,8 +11,12 @@ Nie zastępuje Mono Analog Grid: inna nazwa, identyfikator VST3 i osobny projekt
 4. Wybierz factory scene i styl / model. Kolejne nuty przenoszą podstawę frazy.
 5. DIRECT wyłącza generator: każda nuta MIDI gra bezpośrednio basem.
 6. W AMBIENT włącz pady i wybierz akord, dwa silniki oraz HOLD / FLOW / KRELL.
-7. W FX RACK przestaw moduły strzałkami. W OUTPUT ustaw osobno udział FX basu i pada.
-8. Parametry można automatyzować przez Browse parameters / Last tweaked FL Studio.
+7. Trzy strony: BASS (synteza i generator), AMBIENT (pady), FX.
+8. W FX wybierz BASS / AMBIENT / MASTER. Kliknij moduł, aby edytować jego parametry.
+   Strzałki przestawiają moduły wyłącznie wybranego racka. Każdy rack ma własny udział FX.
+   MASTER przetwarza sumę basu i pada; domyślnie jego udział wynosi 0.
+   Końcowy poziom i soft limiter są dostępne w racku MASTER.
+9. Parametry można automatyzować przez Browse parameters / Last tweaked FL Studio.
 
 Skala jest wybierana w instrumencie; nie analizujemy harmonii utworu. MIDI dostarcza
 podstawę, długość i dynamikę. Tempo, metrum i pozycja rytmiczna pochodzą z hosta.
@@ -28,8 +32,10 @@ Pitch bend: +/- 2 półtony. Obsługiwany sustain CC64 i all-notes-off.
 - Pady: 12 głosów, 2 silniki na głos, analog saw / PWM / spectral / FM / grain texture.
   Grain texture jest proceduralnym oscylatorem, nie importerem sampli.
 - Granular FX przetwarza rzeczywisty bufor audio syntezatora, z pitch i freeze.
-- Oddzielne bufory i racki FX dla basu i pada; jedna wspólna kolejność i zestaw
-  parametrów modułów, niezależny udział efektów każdej warstwy.
+- Trzy niezależne racki FX: BASS, AMBIENT i MASTER. Własne bufory, parametry,
+  kolejność i udział efektów; automatyzacja i zapis wszystkich ustawień.
+- Projekty 0.1.0 zachowują brzmienie: stare wspólne ustawienia FX są kopiowane
+  do racka AMBIENT, a udział nowego MASTER pozostaje zerowy.
 - Drive / soft-knee kompresor, chorus / flanger / Juno-inspired, delay sync
   clean / tape / analog, granular, stereo reverb, width, końcowy soft limiter.
 
