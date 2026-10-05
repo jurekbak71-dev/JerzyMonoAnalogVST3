@@ -271,6 +271,8 @@ void MonoFxPanel::resized()
     };
     const int controlY=topBar+margin+31+24+4;
     const int secondY=controlY+29;
+    const int row2ControlY=controlY+cardH+gap;
+    const int row2SecondY=row2ControlY+29;
     const int usableAfterCombo=juce::jmax(68,controlH-29);
     const int x0=margin,x1=margin+cardW+gap,x2=margin+2*(cardW+gap);
     const int fiveW=(cardW-18)/5;
@@ -281,14 +283,14 @@ void MonoFxPanel::resized()
     knob(5,x1+8,secondY,pairW,usableAfterCombo);knob(6,x1+24+pairW,secondY,pairW,usableAfterCombo);
     const int triW=(cardW-30)/3;
     for(int k=0;k<3;++k)knob(7+k,x2+6+k*(triW+6),controlY,triW,controlH);
-    knob(10,x0+(cardW-116)/2,controlY,116,controlH);
-    modes[2].setBounds(x1+6,controlY,(cardW-18),25);
+    knob(10,x0+(cardW-116)/2,row2ControlY,116,controlH);
+    modes[2].setBounds(x1+6,row2ControlY,(cardW-18),25);
     const int fourW=(cardW-28)/4;
-    for(int k=0;k<4;++k)knob(11+k,x1+4+k*(fourW+4),secondY,fourW,usableAfterCombo);
+    for(int k=0;k<4;++k)knob(11+k,x1+4+k*(fourW+4),row2SecondY,fourW,usableAfterCombo);
     const int rotaryComboW=(cardW-30)/2;
-    rotarySync.setBounds(x2+6,controlY,rotaryComboW,25);
-    modes[3].setBounds(x2+18+rotaryComboW,controlY,rotaryComboW,25);
-    knob(15,x2+8,secondY,pairW,usableAfterCombo);knob(16,x2+24+pairW,secondY,pairW,usableAfterCombo);
+    rotarySync.setBounds(x2+6,row2ControlY,rotaryComboW,25);
+    modes[3].setBounds(x2+18+rotaryComboW,row2ControlY,rotaryComboW,25);
+    knob(15,x2+8,row2SecondY,pairW,usableAfterCombo);knob(16,x2+24+pairW,row2SecondY,pairW,usableAfterCombo);
 }
 
 void JerzyMonoAnalogAudioProcessorEditor::OutputMeter::paint(juce::Graphics& g)
