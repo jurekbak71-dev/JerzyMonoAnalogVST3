@@ -214,6 +214,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
 
     setupToggle(gridSeqOn,"SEQ PLAY",C(GREEN));
     setupToggle(gridMidiTrigger,"MIDI TRIG",C(YELLOW));
+    setupToggle(gridHostSync,"HOST SYNC",C(GREEN));
     setupCombo(gridDivision,{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"});
     setupCombo(gridRoot,{"C1","C#1","D1","D#1","E1","F1","F#1","G1","G#1","A1","A#1","B1","C2","C#2","D2","D#2","E2","F2","F#2","G2","G#2","A2","A#2","B2","C3","C#3","D3","D#3","E3","F3","F#3","G3","G#3","A3","A#3","B3","C4","C#4","D4","D#4","E4","F4","F#4","G4","G#4","A4","A#4","B4","C5","C#5","D5","D#5","E5","F5","F#5","G5","G#5","A5","A#5","B5","C6"});
     setupCombo(gridScale,{"CHROMATIC","MAJOR","NAT MINOR","DORIAN","PHRYGIAN","MIXOLYDIAN","MAJOR PENT","MINOR PENT"});
@@ -261,7 +262,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupCombo(arpOctaves,{"1 OCT","2 OCT","3 OCT","4 OCT"});
 
     setupToggle(legato,"LEGATO",C(GREEN));setupToggle(retrigger,"RETRIGGER",C(RED));setupToggle(lfoSync,"HOST SYNC",C(YELLOW));
-    setupToggle(arpOn,"ARP ON",C(GREEN));setupToggle(arpLatch,"LATCH",C(YELLOW));setupToggle(arpRetrigger,"RETRIGGER",C(RED));
+    setupToggle(arpOn,"ARP ON",C(GREEN));setupToggle(arpLatch,"LATCH",C(YELLOW));setupToggle(arpRetrigger,"RETRIGGER",C(RED));setupToggle(arpHostSync,"HOST SYNC",C(GREEN));
     addAndMakeVisible(outputMeter);
 
     addSection("OSC 1",C(GREEN),15,75,245,215);addSection("OSC 2",C(YELLOW),265,75,265,215);addSection("SUB / NOISE",C(RED),535,75,210,215);
@@ -290,6 +291,8 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     arpOnA=std::make_unique<ButtonAttachment>(s,"arpOn",arpOn);arpLatchA=std::make_unique<ButtonAttachment>(s,"arpLatch",arpLatch);arpRetriggerA=std::make_unique<ButtonAttachment>(s,"arpRetrigger",arpRetrigger);
     gridSeqOnA=std::make_unique<ButtonAttachment>(s,"gridSeqOn",gridSeqOn);
     gridMidiTriggerA=std::make_unique<ButtonAttachment>(s,"gridMidiTrigger",gridMidiTrigger);
+    gridHostSyncA=std::make_unique<ButtonAttachment>(s,"gridHostSync",gridHostSync);
+    arpHostSyncA=std::make_unique<ButtonAttachment>(s,"arpHostSync",arpHostSync);
     gridDivisionA=std::make_unique<ComboAttachment>(s,"gridDivision",gridDivision);
     gridRootA=std::make_unique<ComboAttachment>(s,"gridRoot",gridRoot);
     gridScaleA=std::make_unique<ComboAttachment>(s,"gridScale",gridScale);
@@ -474,9 +477,9 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
 
         place(gridGate,35,194,110,52);
         place(gridSeqOn,165,198,120,34);
-        place(gridMidiTrigger,305,198,150,34);
-        place(gridClearButton,475,198,150,34);
-        place(gridVelocity,645,182,100,70);place(gridSwing,755,182,100,70);
+        place(gridMidiTrigger,305,198,150,34);place(gridHostSync,465,198,145,34);
+        place(gridClearButton,620,198,145,34);
+        place(gridVelocity,785,182,100,70);place(gridSwing,895,182,100,70);
         place(padGrid,180,252,1080,420);
         return;
     }
@@ -503,7 +506,7 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
     {
         place(arpOn,25,760,115,34);place(arpDivision,150,775,135,32);place(arpPattern,295,775,155,32);place(arpRhythm,460,775,150,32);place(arpOctaves,620,775,110,32);
         place(arpGate,735,760,95,90);place(arpVelocity,840,760,95,90);place(arpSwing,945,760,95,90);
-        place(arpLatch,1050,775,115,34);place(arpRetrigger,1180,775,150,34);
+        place(arpHostSync,1050,775,120,34);place(arpLatch,1180,775,105,34);place(arpRetrigger,1290,775,125,34);
     }
 }
 
@@ -520,7 +523,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setSynthControlsVisible(bool v)
         (juce::Component*)&aA,(juce::Component*)&aD,(juce::Component*)&aS,(juce::Component*)&aR,(juce::Component*)&fA,(juce::Component*)&fD,(juce::Component*)&fS,(juce::Component*)&fR,
         (juce::Component*)&lfoRate,(juce::Component*)&lfoPitch,(juce::Component*)&lfoFilter,(juce::Component*)&lfoPWM,(juce::Component*)&lfoAmp,(juce::Component*)&lfoFade,
         (juce::Component*)&glide,(juce::Component*)&outDrive,(juce::Component*)&master,(juce::Component*)&arpGate,(juce::Component*)&arpSwing,(juce::Component*)&arpVelocity,
-        (juce::Component*)&legato,(juce::Component*)&retrigger,(juce::Component*)&lfoSync,(juce::Component*)&arpOn,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger,
+        (juce::Component*)&legato,(juce::Component*)&retrigger,(juce::Component*)&lfoSync,(juce::Component*)&arpOn,(juce::Component*)&arpHostSync,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger,
         (juce::Component*)&outputMeter
     }) c->setVisible(v);
 
@@ -538,8 +541,8 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(bool pads)
         getConstrainer()->setFixedAspectRatio(2.0);
         arpPanelOpen=false;
         setSynthControlsVisible(false);
-        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
+        for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridHostSync,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
+                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridHostSync,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
         const int w=getWidth();setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));
     }
     else
@@ -556,11 +559,11 @@ void JerzyMonoAnalogAudioProcessorEditor::updateGridControls()
     const bool launch=proc.getGridMode()==JerzyMonoAnalogAudioProcessor::GridMode::launch;
     gridModeButton.setButtonText(launch?"MODE: LAUNCH":"MODE: SEQ");
     gridSeqOn.setEnabled(!launch);
-    gridMidiTrigger.setEnabled(!launch);
+    gridMidiTrigger.setEnabled(!launch);gridHostSync.setEnabled(!launch);
     gridDivision.setEnabled(!launch);
     gridBanks.setEnabled(!launch);
     gridDirection.setEnabled(!launch);
-    gridSwing.setEnabled(!launch);gridVelocity.setEnabled(!launch);
+    gridSwing.setEnabled(!launch && !gridHostSync.getToggleState());gridVelocity.setEnabled(!launch);
     gridScale.setEnabled(!launch);
     gridRoot.setEnabled(true);
     gridGate.setEnabled(!launch);
@@ -573,7 +576,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setArpPanelVisible(bool open)
 {
     getConstrainer()->setFixedAspectRatio(open ? 1440.0/900.0 : 2.0);
     arpPanelOpen=open;arpPanelButton.setButtonText(open?"ARP ^":"ARP V");
-    for(auto*c:{(juce::Component*)&arpOn,(juce::Component*)&arpDivision,(juce::Component*)&arpPattern,(juce::Component*)&arpRhythm,(juce::Component*)&arpOctaves,(juce::Component*)&arpGate,(juce::Component*)&arpVelocity,(juce::Component*)&arpSwing,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger})c->setVisible(open);
+    for(auto*c:{(juce::Component*)&arpOn,(juce::Component*)&arpDivision,(juce::Component*)&arpPattern,(juce::Component*)&arpRhythm,(juce::Component*)&arpOctaves,(juce::Component*)&arpGate,(juce::Component*)&arpVelocity,(juce::Component*)&arpSwing,(juce::Component*)&arpHostSync,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger})c->setVisible(open);
     const int w=getWidth();setSize(w,juce::roundToInt((open?900.0f:720.0f)*(w/1440.0f)));resized();repaint();
 }
 
@@ -582,6 +585,8 @@ void JerzyMonoAnalogAudioProcessorEditor::timerCallback()
     outputMeter.setLevel(proc.getOutputMeter());
     if(!padsPage) repaint();
     const bool sync=lfoSync.getToggleState();lfoRate.setEnabled(!sync);lfoDivision.setEnabled(sync);
+    arpSwing.setEnabled(!arpHostSync.getToggleState());
+    gridSwing.setEnabled(proc.getGridMode()!=JerzyMonoAnalogAudioProcessor::GridMode::launch && !gridHostSync.getToggleState());
     if(padsPage)
     {
         int activeBanks=8;

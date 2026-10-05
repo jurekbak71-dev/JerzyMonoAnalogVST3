@@ -98,7 +98,7 @@ private:
     juce::Label title,subtitle,preset;
     juce::TextButton arpPanelButton;
     juce::TextButton pageButton;
-    juce::ToggleButton gridSeqOn,gridMidiTrigger;
+    juce::ToggleButton gridSeqOn,gridMidiTrigger,gridHostSync;
     juce::TextButton gridModeButton,gridClearButton;
     juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection;
     ResetSlider gridGate,gridSwing,gridVelocity;
@@ -117,7 +117,7 @@ private:
     ResetSlider arpGate,arpSwing,arpVelocity;
 
     juce::ToggleButton legato,retrigger,lfoSync;
-    juce::ToggleButton arpOn,arpLatch,arpRetrigger;
+    juce::ToggleButton arpOn,arpLatch,arpRetrigger,arpHostSync;
     OutputMeter outputMeter;
 
     std::unique_ptr<ComboAttachment> osc1WaveA,osc1OctA,osc2WaveA,osc2OctA,subWaveA,lfoWaveA,lfoDivisionA,glideModeA,priorityA;
@@ -130,7 +130,7 @@ private:
     std::unique_ptr<SliderAttachment> aAA,aDA,aSA,aRA,fAA,fDA,fSA,fRA;
     std::unique_ptr<SliderAttachment> lfoRateA,lfoPitchA,lfoFilterA,lfoPWMA,lfoAmpA,lfoFadeA;
     std::unique_ptr<SliderAttachment> glideA,outDriveA,masterA,arpGateA,arpSwingA,arpVelocityA,gridGateA,gridSwingA,gridVelocityA;
-    std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA;
+    std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA,gridHostSyncA,arpHostSyncA;
 
     bool arpPanelOpen=false;
     bool padsPage=false;

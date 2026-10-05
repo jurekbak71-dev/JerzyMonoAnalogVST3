@@ -118,8 +118,8 @@ The Ladder 24 dB path is unchanged when the new destinations are zero.
 - Grid and arpeggiator note events are emitted as MIDI, with sample-offset note-on
   and note-off events. MIDI input continues to trigger the synth and the Grid's
   MIDI-trigger mode. VST3 advertises MIDI output for routing in FL Studio.
-- The arp and Grid timing continue to use the host tempo and the existing
-  tempo-division controls. Pattern state and all new controls are saved with the
+- Host Sync follows FL Studio transport position (PPQ), tempo and play/stop state.
+  Turn Host Sync off to use the internal clock and Swing. Pattern state and all new controls are saved with the
   project; old presets receive safe defaults.
 - Design references: Circuit Mono Station User Guide (step direction/length,
   separate note and modulation sequencing concepts), Arturia KeyStep Pro and

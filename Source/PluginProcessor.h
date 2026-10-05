@@ -48,7 +48,7 @@ private:
     int chooseArpNote(int pattern, int step);
     bool arpRhythmGate(int rhythm, int step) const;
     void resetArpState();
-    void processGridSequencerSample(double bpm,int sampleOffset,juce::MidiBuffer& generatedMidi);
+    void processGridSequencerSample(double bpm,int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool hostHasPpq,bool hostPlaying);
     int gridNoteForRow(int row) const;
     int gridRootMidiFromChoice() const;
     bool isGridMidiRunning() const noexcept { return gridMidiRunning.load(); }
@@ -77,6 +77,10 @@ private:
     double gridCurrentStepSamples = 0.0;
     double arpCurrentStepSamples = 0.0;
     int gridGlobalStep = 0;
+    int lastArpHostStep = -1;
+    int lastGridHostStep = -1;
+    int lastArpHostStep = -1;
+    int lastGridHostStep = -1;
     int gridCurrentNote = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)
 };
