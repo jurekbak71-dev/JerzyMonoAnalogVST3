@@ -406,7 +406,9 @@ public:
     }
     void noteOff(int note,int channel,const Parameters& p,double ppq) {
         if(note<0||note>127||channel<1||channel>16) return;
-        auto& h=held[size_t((channel-1)*128+note)];h.key=false;h.sustained=sustain[size_t(channel-1)];chooseRoot(p,ppq);
+        auto& h=held[size_t((channel-1)*128+note)];
+        if(h.note<0) return;
+        h.key=false;h.sustained=sustain[size_t(channel-1)];chooseRoot(p,ppq);
     }
     void controller(int channel,int number,int value,const Parameters& p,double ppq) {
         if(channel<1||channel>16) return;

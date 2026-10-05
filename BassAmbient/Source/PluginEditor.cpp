@@ -140,7 +140,7 @@ public:
 };
 
 BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEditor(p),processor(p),theme(std::make_unique<Theme>()) {
-    setLookAndFeel(theme.get());setResizable(true,true);setResizeLimits(840,600,1680,1200);
+    setLookAndFeel(theme.get());
     const char* names[]{"BASS","GENERATOR","AMBIENT","FX RACK","OUTPUT"};
     for(int k=0;k<5;++k) {
         tabs[size_t(k)].setButtonText(names[k]);tabs[size_t(k)].onClick=[this,k]{selectPage(k);};addAndMakeVisible(tabs[size_t(k)]);
@@ -156,6 +156,8 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
         juce::MemoryBlock state;processor.getStateInformation(state);processor.setStateInformation(state.getData(),int(state.getSize()));
     };addAndMakeVisible(panic);addAndMakeVisible(status);
     status.setColour(juce::Label::textColourId,muted);
+    // setResizeLimits may invoke resized(): pages must exist before applying it.
+    setResizable(true,true);setResizeLimits(840,600,1680,1200);
     setSize(1040,740);selectPage(0);startTimerHz(20);
 }
 BassAmbientEditor::~BassAmbientEditor() { stopTimer();viewport.setViewedComponent(nullptr,false);setLookAndFeel(nullptr); }
@@ -164,10 +166,10 @@ void BassAmbientEditor::selectPage(int index) {
     viewport.setViewedComponent(pages[size_t(index)].get(),false);resized();viewport.setViewPosition(0,0);
 }
 void BassAmbientEditor::paint(juce::Graphics& g) {
-    g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(25).withStyle("Bold")));
-    g.drawText("JERZY  /  BASS AMBIENT",20,12,450,35,juce::Justification::centredLeft);
+    g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
+    g.drawText("JERZY  /  BASS AMBIENT",20,12,330,35,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12)));
-    g.drawText("0.1.0  •  PIANO ROLL ROOT  •  HOST SYNC",22,47,400,20,juce::Justification::centredLeft);
+    g.drawText("0.1.0  •  PIANO ROLL ROOT  •  HOST SYNC",22,47,340,20,juce::Justification::centredLeft);
 }
 void BassAmbientEditor::resized() {
     presets.setBounds(getWidth()-460,22,220,34);mutate.setBounds(getWidth()-228,22,100,34);panic.setBounds(getWidth()-116,22,96,34);

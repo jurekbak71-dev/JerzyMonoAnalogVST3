@@ -42,3 +42,9 @@ jobs:
           path: Jerzy-Bass-Ambient-0.1.0-Windows-x64.zip
           if-no-files-found: error
           retention-days: 90
+      - name: Upload GUI verification images
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bass-Ambient-GUI-QA
+          path: build-bass-ambient/gui-*.png
+          if-no-files-found: error
