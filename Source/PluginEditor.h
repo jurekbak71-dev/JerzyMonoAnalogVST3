@@ -100,8 +100,8 @@ private:
     juce::TextButton pageButton;
     juce::ToggleButton gridSeqOn,gridMidiTrigger;
     juce::TextButton gridModeButton,gridClearButton;
-    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks;
-    ResetSlider gridGate;
+    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection;
+    ResetSlider gridGate,gridSwing,gridVelocity;
     PadGrid padGrid;
 
     juce::ComboBox filterMode;
@@ -114,7 +114,7 @@ private:
     ResetSlider aA,aD,aS,aR,fA,fD,fS,fR;
     ResetSlider lfoRate,lfoPitch,lfoFilter,lfoPWM,lfoAmp,lfoFade;
     ResetSlider glide,outDrive,master;
-    ResetSlider arpGate;
+    ResetSlider arpGate,arpSwing,arpVelocity;
 
     juce::ToggleButton legato,retrigger,lfoSync;
     juce::ToggleButton arpOn,arpLatch,arpRetrigger;
@@ -122,14 +122,14 @@ private:
 
     std::unique_ptr<ComboAttachment> osc1WaveA,osc1OctA,osc2WaveA,osc2OctA,subWaveA,lfoWaveA,lfoDivisionA,glideModeA,priorityA;
     std::unique_ptr<ComboAttachment> arpDivisionA,arpPatternA,arpRhythmA,arpOctavesA;
-    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA;
+    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA;
     std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
     std::unique_ptr<ComboAttachment> filterModeA;
     std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
     std::unique_ptr<SliderAttachment> cutoffA,resonanceA,filterDriveA,filterEnvA,keyTrackA;
     std::unique_ptr<SliderAttachment> aAA,aDA,aSA,aRA,fAA,fDA,fSA,fRA;
     std::unique_ptr<SliderAttachment> lfoRateA,lfoPitchA,lfoFilterA,lfoPWMA,lfoAmpA,lfoFadeA;
-    std::unique_ptr<SliderAttachment> glideA,outDriveA,masterA,arpGateA,gridGateA;
+    std::unique_ptr<SliderAttachment> glideA,outDriveA,masterA,arpGateA,arpSwingA,arpVelocityA,gridGateA,gridSwingA,gridVelocityA;
     std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA;
 
     bool arpPanelOpen=false;

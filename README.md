@@ -108,3 +108,20 @@ The existing bipolar `ENV AMOUNT` continues routing this ADSR to filter cutoff.
 All three new parameters are appended after existing parameter IDs/indices.
 Old presets explicitly restore Ladder 24 dB with pitch/PWM depths at zero.
 The Ladder 24 dB path is unchanged when the new destinations are zero.
+
+## 0.5.0 — Grid sequencer and MIDI performance
+
+- The Grid adds Forward, Reverse, Ping-Pong, and Random playback directions.
+- Grid and arpeggiator add host-automatable Swing and Velocity controls.
+- The arpeggiator's As Played mode now follows the order in which keys were pressed;
+  Up, Down, and Up-Down retain pitch-sorted behavior.
+- Grid and arpeggiator note events are emitted as MIDI, with sample-offset note-on
+  and note-off events. MIDI input continues to trigger the synth and the Grid's
+  MIDI-trigger mode. VST3 advertises MIDI output for routing in FL Studio.
+- The arp and Grid timing continue to use the host tempo and the existing
+  tempo-division controls. Pattern state and all new controls are saved with the
+  project; old presets receive safe defaults.
+- Design references: Circuit Mono Station User Guide (step direction/length,
+  separate note and modulation sequencing concepts), Arturia KeyStep Pro and
+  Novation Summit arpeggiator documentation (key order, octave range, rhythm,
+  swing, gate and performance control).

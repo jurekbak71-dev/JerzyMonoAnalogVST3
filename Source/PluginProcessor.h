@@ -15,7 +15,7 @@ public:
     bool hasEditor() const override { return true; }
     const juce::String getName() const override { return "Jerzy Mono Analog Grid"; }
     bool acceptsMidi() const override { return true; }
-    bool producesMidi() const override { return false; }
+    bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
     int getNumPrograms() override { return 1; }
@@ -48,7 +48,7 @@ private:
     int chooseArpNote(int pattern, int step);
     bool arpRhythmGate(int rhythm, int step) const;
     void resetArpState();
-    void processGridSequencerSample(double bpm);
+    void processGridSequencerSample(double bpm,int sampleOffset,juce::MidiBuffer& generatedMidi);
     int gridNoteForRow(int row) const;
     int gridRootMidiFromChoice() const;
     bool isGridMidiRunning() const noexcept { return gridMidiRunning.load(); }
@@ -74,6 +74,8 @@ private:
     std::atomic<int> gridPlayColumn { -1 };
     std::atomic<int> launchPressedNote { -1 };
     double gridSamplesToNext = 0.0;
+    double gridCurrentStepSamples = 0.0;
+    double arpCurrentStepSamples = 0.0;
     int gridGlobalStep = 0;
     int gridCurrentNote = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)

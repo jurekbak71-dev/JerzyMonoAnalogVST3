@@ -219,6 +219,9 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupCombo(gridScale,{"CHROMATIC","MAJOR","NAT MINOR","DORIAN","PHRYGIAN","MIXOLYDIAN","MAJOR PENT","MINOR PENT"});
     setupCombo(gridBanks,{"1 BANK / 8 STEPS","2 BANKS / 16 STEPS","3 BANKS / 24 STEPS","4 BANKS / 32 STEPS","5 BANKS / 40 STEPS","6 BANKS / 48 STEPS","7 BANKS / 56 STEPS","8 BANKS / 64 STEPS"});
     setupKnob(gridGate,"GATE","",0.75);
+    setupCombo(gridDirection,{"FORWARD","REVERSE","PING-PONG","RANDOM"});
+    setupKnob(gridSwing,"SWING","",0.0);setupKnob(gridVelocity,"VELOCITY","",0.95);
+    setupKnob(arpSwing,"SWING","",0.0);setupKnob(arpVelocity,"VELOCITY","",0.9);
     gridModeButton.setButtonText("MODE: SEQ");
     gridModeButton.onClick=[this]
     {
@@ -291,7 +294,12 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     gridRootA=std::make_unique<ComboAttachment>(s,"gridRoot",gridRoot);
     gridScaleA=std::make_unique<ComboAttachment>(s,"gridScale",gridScale);
     gridBanksA=std::make_unique<ComboAttachment>(s,"gridBanks",gridBanks);
+    gridDirectionA=std::make_unique<ComboAttachment>(s,"gridDirection",gridDirection);
     gridGateA=std::make_unique<SliderAttachment>(s,"gridGate",gridGate);
+    gridSwingA=std::make_unique<SliderAttachment>(s,"gridSwing",gridSwing);
+    gridVelocityA=std::make_unique<SliderAttachment>(s,"gridVelocity",gridVelocity);
+    arpSwingA=std::make_unique<SliderAttachment>(s,"arpSwing",arpSwing);
+    arpVelocityA=std::make_unique<SliderAttachment>(s,"arpVelocity",arpVelocity);
 
     setupKnob(osc1Level,"LEVEL","",0.0);setupKnob(pulseWidth,"PULSE WIDTH","",0.5);
     setupKnob(osc2Level,"LEVEL","",0.0);setupKnob(detune,"DETUNE","ct",0.0);
@@ -462,11 +470,13 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
         place(gridDivision,515,132,145,34);
         place(gridScale,675,132,160,34);
         place(gridRoot,850,132,130,34);
+    place(gridDirection,1000,132,180,34);
 
         place(gridGate,35,194,110,52);
         place(gridSeqOn,165,198,120,34);
         place(gridMidiTrigger,305,198,150,34);
         place(gridClearButton,475,198,150,34);
+        place(gridVelocity,645,182,100,70);place(gridSwing,755,182,100,70);
         place(padGrid,180,252,1080,420);
         return;
     }
@@ -491,8 +501,9 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
 
     if(arpPanelOpen)
     {
-        place(arpOn,35,760,120,34);place(arpDivision,170,775,150,32);place(arpPattern,335,775,180,32);place(arpRhythm,530,775,180,32);place(arpOctaves,725,775,130,32);
-        place(arpGate,870,760,110,90);place(arpLatch,1000,775,120,34);place(arpRetrigger,1140,775,150,34);
+        place(arpOn,25,760,115,34);place(arpDivision,150,775,135,32);place(arpPattern,295,775,155,32);place(arpRhythm,460,775,150,32);place(arpOctaves,620,775,110,32);
+        place(arpGate,735,760,95,90);place(arpVelocity,840,760,95,90);place(arpSwing,945,760,95,90);
+        place(arpLatch,1050,775,115,34);place(arpRetrigger,1180,775,150,34);
     }
 }
 
@@ -508,7 +519,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setSynthControlsVisible(bool v)
         (juce::Component*)&mixDrive,(juce::Component*)&drift,(juce::Component*)&cutoff,(juce::Component*)&resonance,(juce::Component*)&filterDrive,(juce::Component*)&filterEnv,(juce::Component*)&keyTrack,
         (juce::Component*)&aA,(juce::Component*)&aD,(juce::Component*)&aS,(juce::Component*)&aR,(juce::Component*)&fA,(juce::Component*)&fD,(juce::Component*)&fS,(juce::Component*)&fR,
         (juce::Component*)&lfoRate,(juce::Component*)&lfoPitch,(juce::Component*)&lfoFilter,(juce::Component*)&lfoPWM,(juce::Component*)&lfoAmp,(juce::Component*)&lfoFade,
-        (juce::Component*)&glide,(juce::Component*)&outDrive,(juce::Component*)&master,(juce::Component*)&arpGate,
+        (juce::Component*)&glide,(juce::Component*)&outDrive,(juce::Component*)&master,(juce::Component*)&arpGate,(juce::Component*)&arpSwing,(juce::Component*)&arpVelocity,
         (juce::Component*)&legato,(juce::Component*)&retrigger,(juce::Component*)&lfoSync,(juce::Component*)&arpOn,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger,
         (juce::Component*)&outputMeter
     }) c->setVisible(v);
@@ -528,7 +539,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(bool pads)
         arpPanelOpen=false;
         setSynthControlsVisible(false);
         for(auto* c:{(juce::Component*)&gridSeqOn,(juce::Component*)&gridMidiTrigger,(juce::Component*)&gridModeButton,(juce::Component*)&gridClearButton,(juce::Component*)&gridBankBox,
-                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridGate,(juce::Component*)&padGrid}) c->setVisible(true);
+                     (juce::Component*)&gridBanks,(juce::Component*)&gridDivision,(juce::Component*)&gridScale,(juce::Component*)&gridRoot,(juce::Component*)&gridDirection,(juce::Component*)&gridGate,(juce::Component*)&gridSwing,(juce::Component*)&gridVelocity,(juce::Component*)&padGrid}) c->setVisible(true);
         const int w=getWidth();setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));
     }
     else
@@ -548,6 +559,8 @@ void JerzyMonoAnalogAudioProcessorEditor::updateGridControls()
     gridMidiTrigger.setEnabled(!launch);
     gridDivision.setEnabled(!launch);
     gridBanks.setEnabled(!launch);
+    gridDirection.setEnabled(!launch);
+    gridSwing.setEnabled(!launch);gridVelocity.setEnabled(!launch);
     gridScale.setEnabled(!launch);
     gridRoot.setEnabled(true);
     gridGate.setEnabled(!launch);
@@ -560,7 +573,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setArpPanelVisible(bool open)
 {
     getConstrainer()->setFixedAspectRatio(open ? 1440.0/900.0 : 2.0);
     arpPanelOpen=open;arpPanelButton.setButtonText(open?"ARP ^":"ARP V");
-    for(auto*c:{(juce::Component*)&arpOn,(juce::Component*)&arpDivision,(juce::Component*)&arpPattern,(juce::Component*)&arpRhythm,(juce::Component*)&arpOctaves,(juce::Component*)&arpGate,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger})c->setVisible(open);
+    for(auto*c:{(juce::Component*)&arpOn,(juce::Component*)&arpDivision,(juce::Component*)&arpPattern,(juce::Component*)&arpRhythm,(juce::Component*)&arpOctaves,(juce::Component*)&arpGate,(juce::Component*)&arpVelocity,(juce::Component*)&arpSwing,(juce::Component*)&arpLatch,(juce::Component*)&arpRetrigger})c->setVisible(open);
     const int w=getWidth();setSize(w,juce::roundToInt((open?900.0f:720.0f)*(w/1440.0f)));resized();repaint();
 }
 
