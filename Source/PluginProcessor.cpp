@@ -311,7 +311,7 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
         {
             if (auto hostBpm = pos->getBpm()) bpm = *hostBpm;
             if (auto ppq = pos->getPpqPosition()) { hostPpqStart = *ppq; hostHasPpq = true; }
-            if (auto playing = pos->getIsPlaying()) hostPlaying = *playing;
+            hostPlaying = pos->getIsPlaying();
         }
 
     if (apvts.getRawParameterValue("lfoSync")->load() > 0.5f)

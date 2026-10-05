@@ -79,8 +79,6 @@ private:
     int gridGlobalStep = 0;
     int lastArpHostStep = -1;
     int lastGridHostStep = -1;
-    int lastArpHostStep = -1;
-    int lastGridHostStep = -1;
     int gridCurrentNote = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)
 };
