@@ -45,6 +45,7 @@ public:
     void launchPadNoteOff(int padIndex);
     int getGridPlayColumn() const noexcept { return gridPlayColumn.load(); }
     int getGridRootNote() const noexcept { return gridRootNote.load(); }
+    int getGridRowNote(int row) const { return gridNoteForRow(row); }
     void setGridRootNote(int n) noexcept { gridRootNote.store(juce::jlimit(24,84,n)); }
 private:
     int getChoiceIndex(const char* id) const;

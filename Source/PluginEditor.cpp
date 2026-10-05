@@ -6,6 +6,12 @@ constexpr auto RED=0xffdf7654, GREEN=0xff9faf7c, YELLOW=0xffe3b65c;
 constexpr auto PANEL=0xff292b29, EDGE=0xff777164;
 static juce::Colour C(juce::uint32 x){return juce::Colour(x);}
 static const juce::Colour lcdBg=C(0xffd5cdb8), lcdText=C(0xff24231f);
+static juce::String midiNoteName(int note)
+{
+    static const char* names[]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    note=juce::jlimit(0,127,note);
+    return juce::String(names[note%12])+juce::String(note/12-1);
+}
 
 static void drawLed(juce::Graphics& g, juce::Point<float> c, float r, juce::Colour col)
 {
@@ -92,8 +98,8 @@ void JerzyLookAndFeel::positionComboBoxText(juce::ComboBox& b,juce::Label& l)
 
 int JerzyMonoAnalogAudioProcessorEditor::PadGrid::padAt(juce::Point<float> p) const
 {
-    auto r=getLocalBounds().toFloat().reduced(8.0f);
-    const float gap=7.0f;
+    auto r=getLocalBounds().toFloat().reduced(8.0f);r.removeFromLeft(24.0f);r.removeFromTop(20.0f);
+    const float gap=5.0f;
     const float pw=(r.getWidth()-gap*7.0f)/8.0f;
     const float ph=(r.getHeight()-gap*7.0f)/8.0f;
     int col=(int)((p.x-r.getX())/(pw+gap));
@@ -105,12 +111,15 @@ int JerzyMonoAnalogAudioProcessorEditor::PadGrid::padAt(juce::Point<float> p) co
 
 void JerzyMonoAnalogAudioProcessorEditor::PadGrid::paint(juce::Graphics& g)
 {
-    g.fillAll(C(0xff07090b));
-    auto r=getLocalBounds().toFloat().reduced(8.0f);
-    const float gap=7.0f;
+    g.fillAll(C(0xff20221f));
+    auto r=getLocalBounds().toFloat().reduced(8.0f);r.removeFromLeft(24.0f);r.removeFromTop(20.0f);
+    const float gap=5.0f;
     const float pw=(r.getWidth()-gap*7.0f)/8.0f;
     const float ph=(r.getHeight()-gap*7.0f)/8.0f;
     const int playCol=proc.getGridPlayColumn();
+
+    g.setColour(C(0xffe4d6b8));g.setFont(juce::Font(juce::FontOptions("Arial",juce::jlimit(9.0f,13.0f,ph*.25f),juce::Font::bold)));
+    for(int col=0;col<8;++col){auto x=r.getX()+col*(pw+gap);g.drawText(juce::String::formatted("%02d",col+1),(int)x,1,(int)pw,17,juce::Justification::centred);}
 
     for(int row=0;row<8;++row)
     {
@@ -136,6 +145,20 @@ void JerzyMonoAnalogAudioProcessorEditor::PadGrid::paint(juce::Graphics& g)
             g.setColour(colr.withAlpha(0.20f));g.fillRoundedRectangle(cell.expanded(4.0f),7.0f);
             g.setColour(colr);g.fillRoundedRectangle(cell,6.0f);
             g.setColour(juce::Colours::white.withAlpha(0.22f));g.drawRoundedRectangle(cell.reduced(1.0f),5.0f,1.0f);
+            if(col==0){
+                const auto rowName=mode==JerzyMonoAnalogAudioProcessor::GridMode::sequencer?midiNoteName(proc.getGridRowNote(row)):juce::String("R")+juce::String(row+1);
+                g.setColour(C(0xfff2e8d2));g.setFont(juce::Font(juce::FontOptions("Arial",juce::jlimit(8.0f,12.0f,ph*.22f),juce::Font::bold)));
+                g.drawText(rowName,0,(int)cell.getY(),22,(int)cell.getHeight(),juce::Justification::centred);
+            }
+            if(mode==JerzyMonoAnalogAudioProcessor::GridMode::sequencer && proc.getGridStep(bank,col,row)){
+                g.setColour(C(0xff1c1a15));g.setFont(juce::Font(juce::FontOptions("Arial",juce::jlimit(8.0f,12.0f,ph*.23f),juce::Font::bold)));
+                g.drawText("ON",cell.toNearestInt(),juce::Justification::centred);
+            }
+            if(mode==JerzyMonoAnalogAudioProcessor::GridMode::launch){
+                const int launchNote=proc.getGridRootNote()+(7-row)*8+col;
+                g.setColour(C(0xfff7efdb));g.setFont(juce::Font(juce::FontOptions("Arial",juce::jlimit(8.0f,11.0f,ph*.20f),juce::Font::bold)));
+                g.drawText(midiNoteName(launchNote),cell.toNearestInt(),juce::Justification::centred);
+            }
         }
     }
 }
