@@ -1,0 +1,44 @@
+name: Bass Ambient Windows VST3
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "bass-ambient/**" ]
+    paths: [ "BassAmbient/**", ".github/workflows/bass-ambient-windows.yml" ]
+permissions:
+  contents: read
+jobs:
+  core-sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Memory and undefined-behaviour checks
+        run: |
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -I BassAmbient/Source BassAmbient/tests/CoreTests.cpp -o core-tests
+          ./core-tests
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure independent instrument
+        run: cmake -S BassAmbient -B build-bass-ambient -G "Visual Studio 17 2022" -A x64
+      - name: Build VST3 and tests
+        run: cmake --build build-bass-ambient --config Release --parallel 2
+      - name: Run DSP and MIDI regression tests
+        run: ctest --test-dir build-bass-ambient -C Release --output-on-failure
+      - name: Package Windows instrument
+        shell: pwsh
+        run: |
+          $plugin = Get-ChildItem build-bass-ambient -Recurse -Directory -Filter "Jerzy Bass Ambient.vst3" | Select-Object -First 1
+          if (-not $plugin) { throw "VST3 bundle not found" }
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item -Recurse $plugin.FullName artifact/
+          Copy-Item BassAmbient/README.md artifact/README.md
+          Compress-Archive -Path artifact/* -DestinationPath Jerzy-Bass-Ambient-0.1.0-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jerzy-Bass-Ambient-Windows-x64-VST3
+          path: Jerzy-Bass-Ambient-0.1.0-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 90

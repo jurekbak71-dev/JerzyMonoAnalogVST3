@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.24)
+project(JerzyBassAmbient VERSION 0.1.0 LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
+add_executable(BassAmbientTests tests/CoreTests.cpp)
+target_include_directories(BassAmbientTests PRIVATE Source)
+add_test(NAME BassAmbientCore COMMAND BassAmbientTests)
+option(BASS_AMBIENT_CORE_ONLY "Build dependency-free DSP tests only" OFF)
+if(BASS_AMBIENT_CORE_ONLY)
+  return()
+endif()
+include(FetchContent)
+FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 9.0.3 GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(JUCE)
+juce_add_plugin(JerzyBassAmbient
+  COMPANY_NAME "Jerzy" BUNDLE_ID "pl.jerzy.bassambient"
+  PLUGIN_MANUFACTURER_CODE Jrzy PLUGIN_CODE Jbam
+  FORMATS VST3 Standalone PRODUCT_NAME "Jerzy Bass Ambient"
+  IS_SYNTH TRUE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE
+  EDITOR_WANTS_KEYBOARD_FOCUS FALSE COPY_PLUGIN_AFTER_BUILD FALSE)
+juce_generate_juce_header(JerzyBassAmbient)
+target_sources(JerzyBassAmbient PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+target_compile_definitions(JerzyBassAmbient PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(JerzyBassAmbient PRIVATE juce::juce_audio_utils PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
