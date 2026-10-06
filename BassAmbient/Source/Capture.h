@@ -44,7 +44,8 @@ public:
     bool snapshot(Snapshot& out,double beats=16) const {
         uint64_t end=published.load(std::memory_order_acquire);
         if(end==0||!capacity)return false;
-        uint64_t first=end>capacity?end-capacity:0,start=end;
+        const uint64_t usable=uint64_t(capacity)-uint64_t(sampleRate*.5);
+        uint64_t first=end>usable?end-usable:0,start=end;
         double endBeat=publishedBeat.load(),begin=std::max(0.0,endBeat-beats);
         while(start>first&&frames[size_t((start-1)%capacity)].beat.load()>=begin)--start;
         if(start==end)return false;

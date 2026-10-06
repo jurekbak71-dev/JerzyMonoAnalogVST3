@@ -136,6 +136,13 @@ int main() {
         a.bass=false;a.pad=true;a.padAttack=.05;a.artifactRate=1;a.artifactDepth=1;b=a;b.artifactDepth=0;
         check(compareRacks(a,b,96000)>.1,"artifacts alter dry ambient");
     }
+    {
+        Instrument zero;Parameters empty;empty.density=0;zero.prepare(48000);zero.noteOn(36,1,1,empty,0);double at=0;
+        check(energy(zero,empty,12000,48000,at)==0,"zero density never leaks an unscheduled root note");
+        Instrument scheduled;scheduled.prepare(48000);Parameters q;int onsets=0;
+        scheduled.observerContext=&onsets;scheduled.observer=[](void* c,int,int ch,double v,double){if(ch==1&&v>0)++*static_cast<int*>(c);};
+        scheduled.noteOn(36,1,1,q,0);scheduled.next(q,0);check(onsets==1,"one MIDI onset at first generated step");
+    }
     // CPU sanity benchmark, release build only: report, don't depend on machine speed.
     Instrument s;s.prepare(48000);p=Parameters{};p.pad=true;p.fxGrain=true;s.noteOn(36,1,1,p,0);double ppq=0;
     auto start=std::chrono::steady_clock::now();auto total=energy(s,p,48000,48000,ppq);

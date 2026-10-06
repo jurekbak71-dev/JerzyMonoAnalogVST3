@@ -585,7 +585,7 @@ private:
             if(root>=0) {
                 if(p.restart) { anchor=ppq;lastStep=std::numeric_limits<int64_t>::min(); }
                 if(p.direct&&p.bass) bassNote(root,velocity,p.legato&&overlapping,false);
-                else if(p.bass) { bassNote(root,velocity,false,false);gateUntil=ppq+divisionBeats(p.division)*p.gate;previousSlide=false; }
+                else if(p.bass) {lastStep=std::numeric_limits<int64_t>::min();gateUntil=-1;previousSlide=false;}
                 if(p.pad&&p.backgroundOn) startPad(p,true);
             } else { bassOff();for(auto& v:pads) releasePad(v);for(auto& v:events)releasePad(v,3);previousSlide=false; }
         } else if(latest) velocity=latest->velocity;
@@ -611,7 +611,7 @@ public:
         previewMask=mask;previewRoot=note;
         if(!midiActive) {
             root=mask?note:-1;rootChannel=1;velocity=.8;
-            if(startBass) { bassNote(note,velocity,false,false); lastStep=std::numeric_limits<int64_t>::min();anchor=ppq; }
+            if(startBass) { if(p.direct)bassNote(note,velocity,false,false); lastStep=std::numeric_limits<int64_t>::min();anchor=ppq; }
             if(!(mask&1)) bassOff();
             if(startAmbient&&p.backgroundOn) startPad(p,true);
             if(!(mask&2)) {for(auto& v:pads)releasePad(v);for(auto& v:events)releasePad(v,3);}
@@ -660,7 +660,8 @@ public:
         if(previousPad&&!p.pad) for(auto& v:pads) releasePad(v);
         if(previousBass&&!p.bass) bassOff();
         if(bassRoot()>=0&&((!previousBass&&p.bass)||(previousDirect!=p.direct))) {
-            bassNote(root,velocity,false,false);lastStep=std::numeric_limits<int64_t>::min();
+            if(p.direct)bassNote(root,velocity,false,false);
+            lastStep=std::numeric_limits<int64_t>::min();
         }
         previousPad=p.pad;previousBass=p.bass;previousDirect=p.direct;
         bool bassHit=false;
