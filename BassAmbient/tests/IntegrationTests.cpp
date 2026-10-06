@@ -1,4 +1,6 @@
 #include "PluginProcessor.h"
+#include "reference/PluginProcessor030.h"
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
 
@@ -162,6 +164,47 @@ int main() {
         auto small=render(64),large=render(511);double difference=0;
         for(size_t i=0;i<small.size();++i)difference=std::max(difference,double(std::abs(small[i]-large[i])));
         require(difference<1e-5,"block-size independent MIDI and generative rendering");
+        // Full 0.3.0 processor comparison, including moving controls and scene changes.
+        double fullPeakError=0;
+        for(int preset: {0,6,8,9,10}) {
+            auto original=std::make_unique<ReferenceProcessor030>();
+            auto optimised=std::make_unique<BassAmbientProcessor>();Host clock;
+            original->setPlayHead(&clock);optimised->setPlayHead(&clock);
+            original->applyPreset(preset);optimised->applyPreset(preset);
+            original->prepareToPlay(48000,128);optimised->prepareToPlay(48000,128);
+            original->saveScene(0);optimised->saveScene(0);
+            double oldTime=0,newTime=0;
+            auto automate=[&](const char* id,float value) {
+                auto* a=original->state.getParameter(id);auto* b=optimised->state.getParameter(id);
+                a->setValueNotifyingHost(a->convertTo0to1(value));b->setValueNotifyingHost(b->convertTo0to1(value));
+            };
+            for(int block=0;block<1000;++block) {
+                juce::AudioBuffer<float> a(2,128),b(2,128);juce::MidiBuffer inputA,inputB;
+                if(block==0)inputA.addEvent(juce::MidiMessage::noteOn(1,36,.9f),17);
+                if(block==130){automate("cutoff",873);automate("pad_chorusDepth",.82f);automate("padLevel",.61f);automate("masterFX",.28f);}
+                if(block==220)inputA.addEvent(juce::MidiMessage::pitchWheel(1,9800),63);
+                if(block==300){original->requestScene(0);optimised->requestScene(0);}
+                if(block==800)inputA.addEvent(juce::MidiMessage::noteOff(1,36),54);
+                if(block==850)inputA.addEvent(juce::MidiMessage::controllerEvent(1,120,0),11);
+                clock.ppq=double(block*128)/24000;inputB=inputA;
+                auto t=std::chrono::steady_clock::now();original->processBlock(a,inputA);
+                oldTime+=std::chrono::duration<double>(std::chrono::steady_clock::now()-t).count();
+                t=std::chrono::steady_clock::now();optimised->processBlock(b,inputB);
+                newTime+=std::chrono::duration<double>(std::chrono::steady_clock::now()-t).count();
+                for(int ch=0;ch<2;++ch)for(int sample=0;sample<128;++sample)
+                    fullPeakError=std::max(fullPeakError,double(std::abs(a.getSample(ch,sample)-b.getSample(ch,sample))));
+            }
+            std::cout<<"Full processor preset "<<preset<<": "<<oldTime<<" -> "<<newTime<<" s, CPU reduction "<<100*(1-newTime/oldTime)<<"%\n";
+            // MIDI-only export must remain byte-identical without allocating an audio snapshot.
+            auto oldMidi=juce::File::getCurrentWorkingDirectory().getChildFile("reference-capture.mid");
+            auto newMidi=juce::File::getCurrentWorkingDirectory().getChildFile("optimised-capture.mid");
+            require(original->exportCapture(oldMidi,true,error)&&optimised->exportCapture(newMidi,true,error),"reference MIDI exports");
+            juce::MemoryBlock oldBytes,newBytes;oldMidi.loadFileAsData(oldBytes);newMidi.loadFileAsData(newBytes);
+            require(oldBytes==newBytes,"identical captured MIDI after optimisation");
+            original->setPlayHead(nullptr);optimised->setPlayHead(nullptr);
+        }
+        std::cout<<"Full processor peak null error: "<<fullPeakError<<"\n";
+        require(fullPeakError<1e-6,"unchanged processor audio with automation and scenes");
         processor.releaseResources();processor.setPlayHead(nullptr);
         std::cout<<"PASS MIDI, three-rack routing state, legacy migration, GUI attachments, reorder and 15 page/rack snapshots\n";
         return 0;

@@ -1,3 +1,5 @@
+// Frozen 0.3.0 DSP reference: commit 7ddfe62df1a3ee1c01d78d66b7599034b4671a0a.
+// Namespace renamed only, for lossless optimisation regression tests.
 #pragma once
 #include <algorithm>
 #include <array>
@@ -6,7 +8,7 @@
 #include <limits>
 #include <vector>
 
-namespace jerzy {
+namespace reference030 {
 constexpr double pi = 3.14159265358979323846;
 template<class T> T clamp(T x, T a, T b) { return std::max(a, std::min(b, x)); }
 inline double hz(double n) { return 440.0 * std::exp2((n - 69.0) / 12.0); }
@@ -55,20 +57,11 @@ struct Parameters : FXParameters {
 
 };
 
-// Memoise only exactly equal inputs; no control-rate decimation or DSP approximation.
-struct ExactCache {
-    double key=std::numeric_limits<double>::quiet_NaN(), value=0;
-    template<class Function> double get(double input,Function calculate) {
-        if(input!=key) {key=input;value=calculate();}return value;
-    }
-};
-
 class Envelope {
     enum Stage { Off, Attack, Decay, Sustain, Release } stage=Off;
     double value=0, rate=48000, releaseStart=0, elapsed=0;
-    ExactCache attackCoefficient;
 public:
-    void prepare(double sr) { rate=sr;attackCoefficient={};reset(); }
+    void prepare(double sr) { rate=sr; reset(); }
     void reset() { stage=Off; value=elapsed=0; }
     void on() { stage=Attack; elapsed=0; }
     void off() { if (stage!=Off && stage!=Release) { stage=Release; releaseStart=value; elapsed=0; } }
@@ -77,7 +70,7 @@ public:
         const double dt=1.0/rate; elapsed+=dt;
         switch(stage) {
         case Off: value=0; break;
-        case Attack: value += (1.0-value)*attackCoefficient.get(a,[&]{return 1.0-std::exp(-6.0*dt/std::max(a,.0002));}); if(elapsed>=a) { value=1; stage=Decay; elapsed=0; } break;
+        case Attack: value += (1.0-value)*(1.0-std::exp(-6.0*dt/std::max(a,.0002))); if(elapsed>=a) { value=1; stage=Decay; elapsed=0; } break;
         case Decay: value=s+(1-s)*std::exp(-5.0*elapsed/std::max(d,.001)); if(elapsed>=d) { value=s; stage=Sustain; } break;
         case Sustain: value=s; break;
         case Release: value=releaseStart*std::exp(-7.0*elapsed/std::max(r,.001)); if(elapsed>=r) { stage=Off; value=0; } break;
@@ -107,10 +100,8 @@ struct Oscillator {
 // Nonlinear four-stage feedback ladder, run at 2x voice rate.
 struct Ladder {
     std::array<double,4> z{};
-    double coefficientRate=0;ExactCache coefficient;
     double process(double x,double cutoff,double resonance,double sr,double saturation) {
-        if(sr!=coefficientRate) {coefficientRate=sr;coefficient={};}
-        double g=coefficient.get(cutoff,[&]{return 1-std::exp(-2*pi*clamp(cutoff,20.0,sr*.18)/sr);});
+        double g=1-std::exp(-2*pi*clamp(cutoff,20.0,sr*.18)/sr);
         x=std::tanh(x*(1+saturation*3)-clamp(resonance,0.0,.96)*3.7*z[3]);
         for(auto& s:z) { s+=g*(std::tanh(x)-std::tanh(s)); x=s; }
         return z[3]*(1+resonance*.35);
@@ -198,17 +189,9 @@ class BassVoice {
     double rate=48000, pitch=36,target=36, elapsed=0, filterLevel=0, velocity=.8;
     bool connected=false, accented=false;
     Oscillator o1,o2,subOsc; Ladder filter; Envelope env;
-    std::array<double,20> stringPhase{},brightness{};
-    double lastTone=-1,lastVelocity=-1;
-    ExactCache glideCoefficient,filterDecay;
-    struct Partial {double stiffness, finger, pick;};
-    static const std::array<Partial,20>& partials() {
-        static const auto table=[] {std::array<Partial,20> result{};
-            for(size_t i=0;i<result.size();++i) {double h=double(i+1);result[i]={std::sqrt(1+.000025*h*h),std::sin(pi*h*.28),std::sin(pi*h*.14)};}
-            return result;}();return table;
-    }
+    std::array<double,20> stringPhase{};
 public:
-    void prepare(double sr) { rate=sr;env.prepare(sr);glideCoefficient={};filterDecay={};reset(); }
+    void prepare(double sr) { rate=sr; env.prepare(sr); reset(); }
     void reset() { env.reset(); filter.reset(); o1={};o2={};subOsc={};elapsed=filterLevel=0;connected=false; }
     void note(int n,double v,bool legato,bool accent) {
         target=clamp(double(n),12.0,108.0);velocity=v;accented=accent;
@@ -221,31 +204,27 @@ public:
         int model=p.source==1?3:p.model;
         double amp=env.next(p.bassAttack,p.bassDecay,p.bassSustain,p.bassRelease);
         double glideTime=connected?p.glide:.001;
-        pitch+=(target-pitch)*glideCoefficient.get(glideTime,[&]{return 1-std::exp(-1/(rate*std::max(glideTime,.001)));});
-        const double decayTime=std::max(.025,p.bassDecay*(accented?1.4:1));
-        filterLevel*=filterDecay.get(decayTime,[&]{return std::exp(-1/(rate*decayTime));});
-        const double f=hz(pitch+bend);
-        if(model==3&&(p.guitarTone!=lastTone||velocity!=lastVelocity)) {
-            for(size_t h=0;h<brightness.size();++h) brightness[h]=std::pow(double(h+1),-(1.9-p.guitarTone*.85-velocity*.2));
-            lastTone=p.guitarTone;lastVelocity=velocity;
-        }
+        pitch+=(target-pitch)*(1-std::exp(-1/(rate*std::max(glideTime,.001))));
+        filterLevel*=std::exp(-1/(rate*std::max(.025,p.bassDecay*(accented?1.4:1))));
         double result=0;
         for(int i=0;i<2;++i) {
+            const double f=hz(pitch+bend);
             if(model==3) {
                 // Dispersive modal string: finger/pick/muted excitation and velocity-dependent damping.
                 double string=0;
-                const auto& table=partials();
-                const double damping=.4+p.guitarMute*7+(p.articulation==2?9:0);
-                const double attack=1-std::exp(-elapsed/(p.articulation==1?.0005:.003));
                 for(size_t h=0;h<stringPhase.size();++h) {
                     double harmonicNumber=double(h+1);
-                    double stiffness=table[h].stiffness;
+                    double stiffness=std::sqrt(1+.000025*harmonicNumber*harmonicNumber);
                     if(f*harmonicNumber*stiffness>rate*.9)continue;
                     stringPhase[h]+=f*harmonicNumber*stiffness/(rate*2);
                     stringPhase[h]-=std::floor(stringPhase[h]);
-                    double excitation=p.articulation==1?table[h].pick:table[h].finger;
+                    double pickPosition=p.articulation==1?.14:.28;
+                    double excitation=std::sin(pi*harmonicNumber*pickPosition);
+                    double damping=.4+p.guitarMute*7+(p.articulation==2?9:0);
                     double fall=std::exp(-elapsed*damping*(1+harmonicNumber*.12));
-                    string+=std::sin(2*pi*stringPhase[h])*excitation*brightness[h]*fall*attack;
+                    double brightness=std::pow(harmonicNumber,-(1.9-p.guitarTone*.85-velocity*.2));
+                    double attack=1-std::exp(-elapsed/(p.articulation==1?.0005:.003));
+                    string+=std::sin(2*pi*stringPhase[h])*excitation*brightness*fall*attack;
                 }
                 double scrape=std::sin(elapsed*21341)*std::sin(elapsed*17321)*std::exp(-elapsed/.007);
                 double x=string+scrape*(p.articulation==1?.1:.025)*velocity;
@@ -302,15 +281,13 @@ struct PadVoice {
         double modulation=p.motion*(.5*random+.5*std::sin(age*.37+pan*3))+p.evolutionDepth*.3*longWave;
         double cents=p.padDrift*(random*7+std::sin(age*.17+pan)*3);
         double x=0;
-        const double f1=hz(note+bend+cents/100),f2=hz(note+secondInterval+bend-cents/120+.045);
-        const double mixAmount=clamp(p.padBlend+blendOffset+modulation*.2,0.0,1.0);
-        const double secondEnv=krell?std::pow(std::max(0.0,std::sin(pi*clamp(age/std::max(.02,secondLength),0.0,1.0))),.7):1;
-        const double cutoff=p.padCutoff*cutoffScale*std::exp2(modulation*2);
         for(int i=0;i<2;++i) {
-            double x1=engine(a,p.engine1,f1,sr*2,modulation,p.padRack.grainSize);
-            double x2=engine(b,p.engine2,f2,sr*2,-modulation,p.padRack.grainSize);
+            double x1=engine(a,p.engine1,hz(note+bend+cents/100),sr*2,modulation,p.padRack.grainSize);
+            double x2=engine(b,p.engine2,hz(note+secondInterval+bend-cents/120+.045),sr*2,-modulation,p.padRack.grainSize);
+            double mixAmount=clamp(p.padBlend+blendOffset+modulation*.2,0.0,1.0);
+            double secondEnv=krell?std::pow(std::max(0.0,std::sin(pi*clamp(age/std::max(.02,secondLength),0.0,1.0))),.7):1;
             double mix=x1*(1-mixAmount)+x2*mixAmount*secondEnv;
-            x+=fl.process(mix,cutoff,.12,sr*2,.12);
+            x+=fl.process(mix,p.padCutoff*cutoffScale*std::exp2(modulation*2),.12,sr*2,.12);
         }
         double position=clamp(pan*p.spread+modulation*.12,-1.0,1.0);
         double angle=(position+1)*pi*.25;
@@ -324,11 +301,6 @@ struct StruckVoice {
     std::array<double,12> phases{};
     bool active=false; double note=60,age=0,velocity=.8,pan=0,duration=.3,wait=0;
     int sound=0;
-    static const std::array<std::array<double,12>,2>& weights() {
-        static const auto table=[] {std::array<std::array<double,12>,2> result{};
-            for(size_t k=0;k<12;++k) {result[0][k]=std::pow(double(k+1),-1.25);result[1][k]=std::pow(double(k+1),-1.8);}
-            return result;}();return table;
-    }
     void start(double n,double v,double position,double length,int type,double delay) {
         note=n;velocity=v;pan=position;duration=length;sound=type;wait=delay;age=0;phases.fill(0);active=true;
     }
@@ -338,16 +310,15 @@ struct StruckVoice {
         age+=1/sr;
         const double release=std::exp(-std::max(0.0,age-duration)/(sound==2?.04:.18));
         if(release<.0001) {active=false;return {};}
-        double result=0;const double fundamental=hz(note+bend);
-        const auto& weightTable=weights()[sound==0?0:1];
+        double result=0;
         for(size_t k=0;k<phases.size();++k) {
             double h=double(k+1),ratio=h;
             if(sound==3) ratio=h*(1+.08*h);
-            phases[k]+=fundamental*ratio/sr;phases[k]-=std::floor(phases[k]);
+            phases[k]+=hz(note+bend)*ratio/sr;phases[k]-=std::floor(phases[k]);
             double decay=std::exp(-age*(1+h*(sound==0?.7:.3)));
             double partial=std::sin(2*pi*phases[k]);
             if(sound==1&&k==0) partial=std::sin(2*pi*phases[k]+3*std::exp(-age*8)*std::sin(4*pi*phases[k]));
-            double weight=weightTable[k];
+            double weight=std::pow(h,sound==0?-1.25:-1.8);
             result+=partial*weight*decay;
         }
         result*=velocity*(1-std::exp(-age/.0015))*release*.13;
@@ -360,7 +331,7 @@ class DelayLine {
 public:
     void prepare(size_t size) { data.assign(std::max(size,size_t(8)),0);cursor=0; }
     void clear() { std::fill(data.begin(),data.end(),0);cursor=0; }
-    void push(double x) { data[cursor]=x;if(++cursor==data.size())cursor=0; }
+    void push(double x) { data[cursor]=x;cursor=(cursor+1)%data.size(); }
     double read(double delay) const {
         if(data.empty()) return 0;
         delay=clamp(delay,1.0,double(data.size()-2));
@@ -369,7 +340,7 @@ public:
         // Floating-point wrap can round a tiny negative position to exactly size.
         if(position>=double(data.size())) position=0;
         size_t a=size_t(position);double frac=position-double(a);
-        return data[a]*(1-frac)+data[a+1==data.size()?0:a+1]*frac;
+        return data[a]*(1-frac)+data[(a+1)%data.size()]*frac;
     }
 };
 
@@ -380,29 +351,18 @@ class FXRack {
     std::array<double,8> damp{};
     std::array<double,4> grainPhase{{0,.25,.5,.75}};
     double grainAvailable=0;
-    ExactCache attackCoefficient,releaseCoefficient,toneCoefficient,pitchRatio,saturationRoot;
-    std::array<int,6> lastOrder{{-1,-1,-1,-1,-1,-1}},validOrder{};
-    void updateOrder(const std::array<int,6>& order) {
-        if(order==lastOrder)return;
-        lastOrder=order;std::array<bool,6> used{};int n=0;
-        for(int id:order)if(id>=0&&id<6&&!used[size_t(id)]) {used[size_t(id)]=true;validOrder[size_t(n++)]=id;}
-        for(int id=0;id<6;++id)if(!used[size_t(id)])validOrder[size_t(n++)]=id;
-    }
     static constexpr std::array<double,8> roomSeconds{{.0297,.0371,.0411,.0437,.0307,.0353,.0399,.0479}};
     Stereo driveFX(Stereo x,const FXParameters& p) {
         double level=std::max(std::abs(x.l),std::abs(x.r));
-        if(level==0&&detector==0)return x;
         double tau=level>detector?p.compAttack:p.compRelease;
-        auto& cache=level>detector?attackCoefficient:releaseCoefficient;
-        detector+=(level-detector)*cache.get(tau,[&]{return 1-std::exp(-1/(sr*std::max(.0001,tau)));});
+        detector+=(level-detector)*(1-std::exp(-1/(sr*std::max(.0001,tau))));
         double db=20*std::log10(std::max(detector,1e-9));
         double over=db-p.compThreshold,knee=6, reduction=0;
         if(over>knee*.5) reduction=over*(1-1/p.compRatio);
         else if(over>-knee*.5) reduction=(1-1/p.compRatio)*(over+knee*.5)*(over+knee*.5)/(2*knee);
         double gain=std::pow(10,(p.compMakeup-reduction)/20);
         double amount=1+p.fxSaturation*5;
-        const double normalisation=saturationRoot.get(amount,[&]{return std::sqrt(amount);});
-        return {std::tanh(x.l*gain*amount)/normalisation,std::tanh(x.r*gain*amount)/normalisation};
+        return {std::tanh(x.l*gain*amount)/std::sqrt(amount),std::tanh(x.r*gain*amount)/std::sqrt(amount)};
     }
     Stereo chorusFX(Stereo x,const FXParameters& p) {
         double base=p.chorusMode==1?.002:.012;
@@ -421,7 +381,7 @@ class FXRack {
         double flutter=(std::sin(clock*73)+.4*std::sin(clock*113))*p.flutter*.0012;
         double modulation=p.delayType==0?0:p.wow*.008*wander+flutter;
         Stereo wet{delayL.read(delayTime*(1+modulation)),delayR.read(delayTime*(p.delayMode==1?1.013:1)*(1-modulation*.7))};
-        double coefficient=toneCoefficient.get(p.delayTone,[&]{return 1-std::exp(-2*pi*clamp(p.delayTone,200.0,sr*.2)/sr);});
+        double coefficient=1-std::exp(-2*pi*clamp(p.delayTone,200.0,sr*.2)/sr);
         delayLpf+=coefficient*(wet.l-delayLpf);delayRpf+=coefficient*(wet.r-delayRpf);
         double damage=p.delayType==0?1:1-p.damage*.85*(.5+.5*std::sin(clock*19+wander*11));
         wet={delayLpf*damage,delayRpf*damage};
@@ -433,7 +393,7 @@ class FXRack {
     }
     Stereo grainFX(Stereo x,const FXParameters& p) {
         if(!p.freeze) { grainL.push(x.l);grainR.push(x.r);grainAvailable=std::min(grainAvailable+1,sr*3.5); }
-        double length=std::max(64.0,p.grainSize*sr),ratio=pitchRatio.get(p.grainPitch,[&]{return std::exp2(p.grainPitch/12);});
+        double length=std::max(64.0,p.grainSize*sr),ratio=std::exp2(p.grainPitch/12);
         Stereo wet{}; double total=0;
         for(size_t k=0;k<grainPhase.size();++k) {
             double phase=grainPhase[k];double w=.5-.5*std::cos(2*pi*phase);
@@ -463,13 +423,10 @@ class FXRack {
 public:
     void prepare(double sampleRate) {
         sr=sampleRate;
-        // Exact maximum read distances across every exposed parameter and 20 BPM.
-        // Keep double samples and interpolation; remove only unreachable history.
-        delayL.prepare(size_t(std::ceil(sr*3.1))+4);delayR.prepare(size_t(std::ceil(sr*3.1))+4);
-        chorusL.prepare(size_t(std::ceil(sr*.016))+4);chorusR.prepare(size_t(std::ceil(sr*.016))+4);
-        grainL.prepare(size_t(std::ceil(sr*1.64))+40);grainR.prepare(size_t(std::ceil(sr*1.64))+40);
-        for(size_t k=0;k<room.size();++k)room[k].prepare(size_t(std::ceil(sr*roomSeconds[k]*1.55))+4);
-        attackCoefficient={};releaseCoefficient={};toneCoefficient={};pitchRatio={};saturationRoot={};
+        delayL.prepare(size_t(sr*5));delayR.prepare(size_t(sr*5));
+        chorusL.prepare(size_t(sr*.06));chorusR.prepare(size_t(sr*.06));
+        grainL.prepare(size_t(sr*4));grainR.prepare(size_t(sr*4));
+        for(auto& r:room) r.prepare(size_t(sr*.12));
         reset();
     }
     void reset() {
@@ -479,8 +436,12 @@ public:
         grainPhase={{0,.25,.5,.75}};
     }
     Stereo process(Stereo x,const FXParameters& p,double bpm) {
-        clock+=1/sr;updateOrder(p.order);
-        for(int id:validOrder) {
+        clock+=1/sr;std::array<bool,6> used{};
+        // Sanitize automated permutations: no repeated processing or omitted FX.
+        std::array<int,6> valid{};int n=0;
+        for(int id:p.order) if(id>=0&&id<6&&!used[size_t(id)]) { used[size_t(id)]=true;valid[size_t(n++)]=id; }
+        for(int id=0;id<6;++id) if(!used[size_t(id)]) valid[size_t(n++)]=id;
+        for(int id:valid) {
             switch(id) {
             case 0: if(p.fxDrive) x=driveFX(x,p);break;
             case 1: if(p.fxChorus) x=chorusFX(x,p);break;
@@ -584,7 +545,7 @@ private:
         }
     }
     FXRack bassRack,padRack,masterRack;
-    double dcInL=0,dcInR=0,dcOutL=0,dcOutR=0,dcCoefficient=0,artifactDecay=0;
+    double dcInL=0,dcInR=0,dcOutL=0,dcOutR=0;
     void startPad(const Parameters& p,bool replace) {
         if(replace) for(auto& v:pads) releasePad(v);
         if(ambientRoot()<0) return;
@@ -632,7 +593,7 @@ private:
         } else if(latest) velocity=latest->velocity;
     }
 public:
-    void prepare(double sr) { rate=sr;dcCoefficient=std::exp(-2*pi*5/rate);artifactDecay=std::exp(-1/(rate*.012));bass.prepare(sr);for(auto& v:pads)v.prepare(sr);for(auto& v:events)v.prepare(sr);bassRack.prepare(sr);padRack.prepare(sr);masterRack.prepare(sr);reset(); }
+    void prepare(double sr) { rate=sr;bass.prepare(sr);for(auto& v:pads)v.prepare(sr);for(auto& v:events)v.prepare(sr);bassRack.prepare(sr);padRack.prepare(sr);masterRack.prepare(sr);reset(); }
     void reset() {
         held={};sustain.fill(false);bend.fill(0);serial=0;root=-1;rootChannel=1;bass.reset();
         for(auto& v:pads) { v.env.reset();v.fl.reset();v.fr.reset();v.a={};v.b={};v.age=0; }
@@ -781,7 +742,7 @@ public:
         if(unit(uint32_t(p.lockTimbre?p.timbreSeed:p.seed),uint32_t(artifactCounter++))<probability) {
             artifactEnvelope=1;artifactHold=.004+.06*unit(uint32_t(p.seed),uint32_t(artifactCounter));
         }
-        if(artifactHold>0) artifactHold-=1/rate;else artifactEnvelope*=artifactDecay;
+        if(artifactHold>0) artifactHold-=1/rate;else artifactEnvelope*=std::exp(-1/(rate*.012));
         double damage=p.artifactDepth*(1+.5*modWheel[size_t(rootChannel-1)])*artifactEnvelope;
         double crackle=(unit(17,uint32_t(artifactCounter))*2-1)*damage*.025;
         if(ambientRoot()>=0)dryPad=dryPad*(1-damage*.9)+Stereo{crackle,-crackle*.7};
@@ -793,6 +754,7 @@ public:
         // Master is after the layer sum, before output level / peak guard.
         auto processedMaster=masterRack.process(out,p.masterRack,bpm);
         out=(out*(1-p.masterFX)+processedMaster*p.masterFX)*p.master;
+        const double dcCoefficient=std::exp(-2*pi*5/rate);
         double l=out.l-dcInL+dcCoefficient*dcOutL,r=out.r-dcInR+dcCoefficient*dcOutR;
         dcInL=out.l;dcInR=out.r;dcOutL=l;dcOutR=r;
         if(!std::isfinite(l)||!std::isfinite(r)) { dcInL=dcInR=dcOutL=dcOutR=0;return {}; }

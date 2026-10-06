@@ -1,9 +1,10 @@
-#include "PluginProcessor.h"
-#include "PluginEditor.h"
+// Frozen 0.3.0: 7ddfe62; symbols renamed and unused editor factory stubbed only.
+#include "PluginProcessor030.h"
 
-std::vector<ParameterSpec> parameterSpecs() {
-    const jerzy::Parameters p;
-    std::vector<ParameterSpec> out;
+
+std::vector<ReferenceParameterSpec030> referenceParameterSpecs030() {
+    const reference030::Parameters p;
+    std::vector<ReferenceParameterSpec030> out;
     auto choices=[](const char* text) { return juce::StringArray::fromTokens(text,"|",""); };
 #define BOOL(f,l,g) out.push_back({#f,l,g,1,0,1,double(p.f),1,{}});
 #define FLOAT(f,a,b,s,l,g) out.push_back({#f,l,g,0,a,b,p.f,s,{}});
@@ -28,9 +29,9 @@ std::vector<ParameterSpec> parameterSpecs() {
     return out;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout BassAmbientProcessor::layout() {
+juce::AudioProcessorValueTreeState::ParameterLayout ReferenceProcessor030::layout() {
     juce::AudioProcessorValueTreeState::ParameterLayout result;
-    for(const auto& s:parameterSpecs()) {
+    for(const auto& s:referenceParameterSpecs030()) {
         juce::ParameterID id{s.id,1};
         if(s.kind==1) result.add(std::make_unique<juce::AudioParameterBool>(id,s.label,s.initial>.5));
         else if(s.kind==2) result.add(std::make_unique<juce::AudioParameterInt>(id,s.label,int(s.minimum),int(s.maximum),int(s.initial)));
@@ -40,19 +41,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout BassAmbientProcessor::layout
     return result;
 }
 
-BassAmbientProcessor::BassAmbientProcessor()
+ReferenceProcessor030::ReferenceProcessor030()
     : AudioProcessor(BusesProperties().withOutput("Stereo output",juce::AudioChannelSet::stereo(),true)),
       state(*this,nullptr,"JerzyBassAmbient",layout()) {
-    for(const auto& s:parameterSpecs()) {values.push_back(state.getRawParameterValue(s.id));hostParameters.push_back(state.getParameter(s.id));}
+    for(const auto& s:referenceParameterSpecs030()) {values.push_back(state.getRawParameterValue(s.id));hostParameters.push_back(state.getParameter(s.id));}
     for(auto& scene:sceneData)scene=std::make_unique<std::atomic<float>[]>(values.size());
     instrument.observer=[](void* context,int n,int ch,double v,double duration) {
-        auto* self=static_cast<BassAmbientProcessor*>(context);
+        auto* self=static_cast<ReferenceProcessor030*>(context);
         self->capture.note(n,ch,v,duration<0?duration:duration*self->captureTempo/60);
     };instrument.observerContext=this;
 }
 
-jerzy::Parameters BassAmbientProcessor::readParameters() const {
-    jerzy::Parameters p;size_t i=0;
+reference030::Parameters ReferenceProcessor030::readParameters() const {
+    reference030::Parameters p;size_t i=0;
 #define BOOL(f,l,g) p.f=values[i++]->load()>.5f;
 #define FLOAT(f,a,b,s,l,g) p.f=values[i++]->load();
 #define INT(f,a,b,l,g) p.f=int(std::lround(values[i++]->load()));
@@ -79,14 +80,14 @@ jerzy::Parameters BassAmbientProcessor::readParameters() const {
     return p;
 }
 
-void BassAmbientProcessor::prepareToPlay(double sampleRate,int) {
+void ReferenceProcessor030::prepareToPlay(double sampleRate,int) {
     sr=sampleRate;instrument.prepare(sr);current=readParameters();localPPQ=0;resetRequested=false;capture.prepare(sr);haveScenePPQ=false;
 }
-bool BassAmbientProcessor::isBusesLayoutSupported(const BusesLayout& buses) const {
+bool ReferenceProcessor030::isBusesLayoutSupported(const BusesLayout& buses) const {
     return buses.getMainInputChannelSet().isDisabled()&&buses.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();
 }
 
-void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::MidiBuffer& midi) {
+void ReferenceProcessor030::processBlock(juce::AudioBuffer<float>& audio,juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     if(resetRequested.exchange(false)) {instrument.reset();current=readParameters();}
     audio.clear();auto target=readParameters();
@@ -137,17 +138,9 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
     if(!playing&&requestedScene.load()>=0) {applyQueuedScene();target=readParameters();}
     const double increment=tempo/(60*sr),smoothing=1-std::exp(-1/(sr*.02));
     auto event=midi.cbegin();const auto end=midi.cend();float maximum=0;
-    // Build a stack-only list of moving controls once per block. Equal controls
-    // did exactly zero work numerically in 0.3.0, but consumed ~150 ramps/sample.
-    std::array<std::pair<double*,const double*>,256> ramps{};
-    size_t rampCount=0;
-    auto prepareRamps=[&] {
-        rampCount=0;
-        auto add=[&](double& value,const double& destination) {
-            if(value!=destination) ramps[rampCount++]={&value,&destination};
-        };
+    for(int sample=0;sample<audio.getNumSamples();++sample) {
 #define BOOL(f,l,g)
-#define FLOAT(f,a,b,s,l,g) add(current.f,target.f);
+#define FLOAT(f,a,b,s,l,g) current.f+=(target.f-current.f)*smoothing;
 #define INT(f,a,b,l,g)
 #define CHOICE(f,l,g,c)
 #define CHOICE_DEN(f,l,g)
@@ -161,20 +154,14 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
             auto& c=rack==0?current.padRack:current.masterRack;
             const auto& t=rack==0?target.padRack:target.masterRack;
 #define BOOL(f,l,g)
-#define FLOAT(f,a,b,s,l,g) add(c.f,t.f);
+#define FLOAT(f,a,b,s,l,g) c.f+=(t.f-c.f)*smoothing;
 #define CHOICE(f,l,g,c_)
 #include "FXParameters.def"
 #undef BOOL
 #undef FLOAT
 #undef CHOICE
         }
-        add(current.masterFX,target.masterFX);
-    };
-    prepareRamps();
-    for(int sample=0;sample<audio.getNumSamples();++sample) {
-        for(size_t i=0;i<rampCount;++i) {
-            auto& value=*ramps[i].first;value+=(*ramps[i].second-value)*smoothing;
-        }
+        current.masterFX+=(target.masterFX-current.masterFX)*smoothing;
         const double position=ppq+sample*increment;
         double bar=double(num)*4/std::max(1,den);
         if(playing&&requestedScene.load()>=0&&(!haveScenePPQ||std::floor(position/bar)!=std::floor(previousScenePPQ/bar))) {
@@ -203,7 +190,6 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 #undef CHOICE
                 c.order=t.order;
             }
-            prepareRamps();
         }
         previousScenePPQ=position;haveScenePPQ=true;
         while(event!=end&&(*event).samplePosition<=sample) {
@@ -217,12 +203,9 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
             else if(m.isController()) instrument.controller(ch,m.getControllerNumber(),m.getControllerValue(),current,position);
             ++event;
         }
-        // Audition overrides just two switches; don't copy the entire synth/rack
-        // parameter structure at audio rate. Restore the saved host values after use.
-        const bool bassEnabled=current.bass,padEnabled=current.pad;
-        if(!playing) {current.bass=bassEnabled||auditionBass.load();current.pad=padEnabled||auditionPad.load();}
-        auto output=instrument.next(current,position,num,den);
-        current.bass=bassEnabled;current.pad=padEnabled;
+        auto renderParameters=current;
+        if(!playing) {renderParameters.bass=current.bass||auditionBass.load();renderParameters.pad=current.pad||auditionPad.load();}
+        auto output=instrument.next(renderParameters,position,num,den);
         capture.push(float(output.l),float(output.r),tempo);
         audio.setSample(0,sample,float(output.l));audio.setSample(1,sample,float(output.r));
         maximum=std::max(maximum,float(std::max(std::abs(output.l),std::abs(output.r))));
@@ -231,7 +214,7 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
     rootDisplay=instrument.currentRoot();peak=maximum;
 }
 
-void BassAmbientProcessor::getStateInformation(juce::MemoryBlock& output) {
+void ReferenceProcessor030::getStateInformation(juce::MemoryBlock& output) {
     auto tree=state.copyState();tree.setProperty("schemaVersion",3,nullptr);
     for(int i=tree.getNumChildren()-1;i>=0;--i)if(tree.getChild(i).hasType("SCENES"))tree.removeChild(i,nullptr);
     juce::ValueTree scenes("SCENES");
@@ -243,19 +226,19 @@ void BassAmbientProcessor::getStateInformation(juce::MemoryBlock& output) {
     tree.appendChild(scenes,nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,output);
 }
-void BassAmbientProcessor::setStateInformation(const void* data,int size) {
+void ReferenceProcessor030::setStateInformation(const void* data,int size) {
     if(auto xml=getXmlFromBinary(data,size)) if(xml->hasTagName(state.state.getType())) {
         auto tree=juce::ValueTree::fromXml(*xml);
         // Old sessions used a shared FX configuration: duplicate it to AMBIENT.
         if(int(tree.getProperty("schemaVersion",1))<2) {
-            for(const auto& spec:parameterSpecs()) if(spec.id.startsWith("pad_")) {
+            for(const auto& spec:referenceParameterSpecs030()) if(spec.id.startsWith("pad_")) {
                 const auto source=tree.getChildWithProperty("id",spec.id.substring(4));
                 auto copy=source.isValid()?source.createCopy():juce::ValueTree("PARAM");
                 copy.setProperty("id",spec.id,nullptr);
                 if(!source.isValid()) copy.setProperty("value",spec.initial,nullptr);
                 tree.appendChild(copy,nullptr);
             }
-            for(const auto& spec:parameterSpecs()) if(spec.id.startsWith("master_")||spec.id=="masterFX") {
+            for(const auto& spec:referenceParameterSpecs030()) if(spec.id.startsWith("master_")||spec.id=="masterFX") {
                 juce::ValueTree child("PARAM");child.setProperty("id",spec.id,nullptr);
                 child.setProperty("value",spec.initial,nullptr);tree.appendChild(child,nullptr);
             }
@@ -273,12 +256,12 @@ void BassAmbientProcessor::setStateInformation(const void* data,int size) {
         resetRequested=true;requestedScene=-1;auditionBass=false;auditionPad=false;
     }
 }
-void BassAmbientProcessor::applyPreset(int preset) {
+void ReferenceProcessor030::applyPreset(int preset) {
     auto set=[&](const char* id,float v) {
         if(auto* parameter=state.getParameter(id)) { parameter->beginChangeGesture();parameter->setValueNotifyingHost(parameter->convertTo0to1(v));parameter->endChangeGesture(); }
     };
     // Explicit factory snapshots; all remaining controls return to defaults.
-    for(const auto& s:parameterSpecs()) set(s.id.toRawUTF8(),float(s.initial));
+    for(const auto& s:referenceParameterSpecs030()) set(s.id.toRawUTF8(),float(s.initial));
     if(preset==0) { set("style",0);set("model",2);set("cutoff",1800);set("density",.85f); }
     if(preset==1) { set("style",2);set("model",0);set("slide",.5f);set("resonance",.7f);set("cutoff",700);set("bassFX",.25f); }
     if(preset==2) { set("style",4);set("model",1);set("bassDecay",.8f);set("bassSustain",.65f);set("bassRelease",.3f);set("drive",.4f); }
@@ -292,10 +275,10 @@ void BassAmbientProcessor::applyPreset(int preset) {
     if(preset==10) {set("bass",0);set("pad",1);set("backgroundOn",0);set("eventsOn",1);set("engine1",3);set("engine2",2);set("krellRate",.45f);set("krellAttack",.05f);set("krellRelease",1.2f);set("krellIndependence",1);set("krellFM",.8f);set("artifactRate",.7f);set("artifactDepth",.7f);}
     resetRequested=true;
 }
-void BassAmbientProcessor::setParameter(const juce::String& id,float value) {
+void ReferenceProcessor030::setParameter(const juce::String& id,float value) {
     if(auto* p=state.getParameter(id)) {p->beginChangeGesture();p->setValueNotifyingHost(p->convertTo0to1(value));p->endChangeGesture();}
 }
-void BassAmbientProcessor::synchroniseLocks() {
+void ReferenceProcessor030::synchroniseLocks() {
     const char* locks[]{"lockNotes","lockRhythm","lockTimbre"};
     const char* seeds[]{"phraseSeed","rhythmSeed","timbreSeed"};
     for(size_t i=0;i<3;++i) {
@@ -304,7 +287,7 @@ void BassAmbientProcessor::synchroniseLocks() {
         lastLocks[i]=locked;
     }
 }
-void BassAmbientProcessor::generate(bool mutation) {
+void ReferenceProcessor030::generate(bool mutation) {
     synchroniseLocks();getStateInformation(undoState);
     auto random=juce::Random::getSystemRandom().nextInt(65535)+1;
     if(mutation)setParameter("mutation",float((int(state.getRawParameterValue("mutation")->load())+1)%65536));
@@ -323,11 +306,11 @@ void BassAmbientProcessor::generate(bool mutation) {
         setParameter("pad_chorusDepth",juce::jlimit(0.0f,1.0f,v+(juce::Random::getSystemRandom().nextFloat()-.5f)*(mutation?.15f:.5f)));
     }
 }
-void BassAmbientProcessor::undoGeneration() {
+void ReferenceProcessor030::undoGeneration() {
     if(undoState.getSize()) {auto previous=undoState;juce::MemoryBlock now;getStateInformation(now);setStateInformation(previous.getData(),int(previous.getSize()));undoState=now;}
 }
-bool BassAmbientProcessor::hasScene(int index) const {return index>=0&&index<4&&sceneReady[size_t(index)].load();}
-void BassAmbientProcessor::saveScene(int index) {
+bool ReferenceProcessor030::hasScene(int index) const {return index>=0&&index<4&&sceneReady[size_t(index)].load();}
+void ReferenceProcessor030::saveScene(int index) {
     if(index<0||index>=4)return;
     // Saving snapshots is a UI operation; suspend protects the preallocated scene array.
     const juce::ScopedLock lock(getCallbackLock());
@@ -335,14 +318,14 @@ void BassAmbientProcessor::saveScene(int index) {
     for(size_t i=0;i<hostParameters.size();++i)sceneData[size_t(index)][i]=hostParameters[i]->getValue();
     sceneReady[size_t(index)]=true;
 }
-void BassAmbientProcessor::applyQueuedScene() {
+void ReferenceProcessor030::applyQueuedScene() {
     int scene=requestedScene.exchange(-1);if(!hasScene(scene))return;
     for(size_t i=0;i<hostParameters.size();++i)hostParameters[i]->setValueNotifyingHost(sceneData[size_t(scene)][i].load());
     activeScene=scene;lastSceneSelection=int(state.getRawParameterValue("sceneSelect")->load());
 }
-bool BassAmbientProcessor::exportCapture(const juce::File& file,bool asMidi,juce::String& error) {
-    PerformanceCapture::Snapshot snap;
-    if(!capture.snapshot(snap,16,!asMidi)) {error="Capture unavailable or overwritten. Play a phrase and retry.";return false;}
+bool ReferenceProcessor030::exportCapture(const juce::File& file,bool asMidi,juce::String& error) {
+    ReferenceCapture030::Snapshot snap;
+    if(!capture.snapshot(snap,16)) {error="Capture unavailable or overwritten. Play a phrase and retry.";return false;}
     auto stream=file.createOutputStream();if(!stream||!stream->openedOk()){error="Cannot create output file.";return false;}
     stream->setPosition(0);stream->truncate();
     if(asMidi) {
@@ -378,5 +361,5 @@ bool BassAmbientProcessor::exportCapture(const juce::File& file,bool asMidi,juce
     }
     return true;
 }
-juce::AudioProcessorEditor* BassAmbientProcessor::createEditor() { return new BassAmbientEditor(*this); }
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new BassAmbientProcessor(); }
+juce::AudioProcessorEditor* ReferenceProcessor030::createEditor() { return nullptr; }
+

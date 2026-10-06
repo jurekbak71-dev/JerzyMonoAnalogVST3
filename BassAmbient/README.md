@@ -1,10 +1,16 @@
-# Jerzy Bass Ambient 0.3.0 — Windows x64 VST3 + Standalone
+# Jerzy Bass Ambient 0.3.1 — Windows x64 VST3 + Standalone
 
 Instrument generatywny sterowany nutami z Piano Roll. BASS, AMBIENT i trzy osobne racki BASS / AMBIENT / MASTER. Identyfikator VST3 pozostaje ten sam co w 0.2.0.
 
+## Optymalizacja 0.3.1
+
+Bufory DSP przy 48 kHz zajmują około 10 MiB mniej na instancję. Powtarzalne współczynniki są obliczane ponownie tylko po zmianie ich wejść, a wygładzanie obejmuje parametry, które faktycznie się zmieniają. Zachowano podwójną precyzję, oversampling, polifonię, efekty i ich wybrzmiewanie, automatykę oraz GUI 0.3.0 (w tym jego oznaczenie wersji). Eksport MIDI nie tworzy już niepotrzebnej kopii nagrania audio.
+
+Testy porównują dźwięk z zamrożonym kodem 0.3.0, również podczas automatyki, zmian scen i przy maksymalnych zakresach efektów. Oszczędność CPU zależy od presetu, częstotliwości próbkowania i komputera; pomiary testowe nie są pomiarem obciążenia FL Studio.
+
 ## Instalacja
 
-Zamknij host. Zastąp cały folder `Jerzy Bass Ambient.vst3` w `C:\Program Files\Common Files\VST3`, następnie przeskanuj wtyczki w FL Studio. Zachowaj kopię 0.2.0 i projektu przed podmianą. Plik EXE działa samodzielnie: w jego ustawieniach wybierz urządzenie audio i wejście MIDI.
+Zamknij host. Zastąp cały folder `Jerzy Bass Ambient.vst3` w `C:\Program Files\Common Files\VST3`, następnie przeskanuj wtyczki w FL Studio. Zachowaj kopię poprzedniej wersji i projektu przed podmianą. Plik EXE działa samodzielnie: w jego ustawieniach wybierz urządzenie audio i wejście MIDI.
 
 ## Szybki start
 

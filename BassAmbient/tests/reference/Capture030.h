@@ -1,3 +1,4 @@
+// Frozen 0.3.0: 7ddfe62; symbols renamed and unused editor factory stubbed only.
 #pragma once
 #include <JuceHeader.h>
 #include <atomic>
@@ -5,7 +6,7 @@
 #include <vector>
 
 // Bounded, single-writer capture. Export uses atomic reads; the audio callback never waits.
-class PerformanceCapture {
+class ReferenceCapture030 {
     struct Frame { std::atomic<float> l{0},r{0}; std::atomic<double> beat{0}; };
     struct Event {
         std::atomic<uint64_t> sequence{0};std::atomic<double> beat{0},duration{0};
@@ -41,7 +42,7 @@ public:
         tempo.store(bpm,std::memory_order_relaxed);publishedBeat.store(clock,std::memory_order_relaxed);
         published.store(written,std::memory_order_release);
     }
-    bool snapshot(Snapshot& out,double beats=16,bool includeAudio=true) const {
+    bool snapshot(Snapshot& out,double beats=16) const {
         uint64_t end=published.load(std::memory_order_acquire);
         if(end==0||!capacity)return false;
         const uint64_t usable=uint64_t(capacity)-uint64_t(sampleRate*.5);
@@ -50,10 +51,8 @@ public:
         while(start>first&&frames[size_t((start-1)%capacity)].beat.load()>=begin)--start;
         if(start==end)return false;
         out.sr=sampleRate;out.bpm=tempo.load();out.startBeat=frames[size_t(start%capacity)].beat.load();out.endBeat=endBeat;
-        if(includeAudio) {
-            out.audio.setSize(2,int(end-start));
-            for(uint64_t k=start;k<end;++k) {const auto& f=frames[size_t(k%capacity)];out.audio.setSample(0,int(k-start),f.l.load());out.audio.setSample(1,int(k-start),f.r.load());}
-        }
+        out.audio.setSize(2,int(end-start));
+        for(uint64_t k=start;k<end;++k) {const auto& f=frames[size_t(k%capacity)];out.audio.setSample(0,int(k-start),f.l.load());out.audio.setSample(1,int(k-start),f.r.load());}
         if(published.load(std::memory_order_acquire)-start>capacity)return false;
         auto eEnd=publishedEvents.load(std::memory_order_acquire),eStart=eEnd>eventCapacity?eEnd-eventCapacity:0;
         for(uint64_t k=eStart;k<eEnd;++k) {
