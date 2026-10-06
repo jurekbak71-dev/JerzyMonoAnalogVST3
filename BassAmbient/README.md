@@ -1,73 +1,51 @@
-# Jerzy Bass Ambient 0.2.0
+# Jerzy Bass Ambient 0.3.0 — Windows x64 VST3 + Standalone
 
-Osobny instrument VST3 / Standalone dla Windows x64, prototyp do odsłuchu w FL Studio.
-Nie zastępuje Mono Analog Grid: inna nazwa, identyfikator VST3 i osobny projekt CMake.
+Instrument generatywny sterowany nutami z Piano Roll. BASS, AMBIENT i trzy osobne racki BASS / AMBIENT / MASTER. Identyfikator VST3 pozostaje ten sam co w 0.2.0.
 
-## Obsługa w FL Studio
+## Instalacja
 
-1. Skopiuj cały folder `Jerzy Bass Ambient.vst3` do `C:\Program Files\Common Files\VST3`.
-2. W Plugin Manager FL Studio wykonaj skan, dodaj instrument do Channel Rack.
-3. W Piano Roll narysuj długą nutę, np. A2. Generator basu pracuje podczas jej trwania.
-4. Wybierz factory scene i styl / model. Kolejne nuty przenoszą podstawę frazy.
-5. DIRECT wyłącza generator: każda nuta MIDI gra bezpośrednio basem.
-6. W AMBIENT włącz pady i wybierz akord, dwa silniki oraz HOLD / FLOW / KRELL.
-7. Trzy strony: BASS (synteza i generator), AMBIENT (pady), FX.
-8. W FX wybierz BASS / AMBIENT / MASTER. Kliknij moduł, aby edytować jego parametry.
-   Strzałki przestawiają moduły wyłącznie wybranego racka. Każdy rack ma własny udział FX.
-   MASTER przetwarza sumę basu i pada; domyślnie jego udział wynosi 0.
-   Końcowy poziom i soft limiter są dostępne w racku MASTER.
-9. Parametry można automatyzować przez Browse parameters / Last tweaked FL Studio.
+Zamknij host. Zastąp cały folder `Jerzy Bass Ambient.vst3` w `C:\Program Files\Common Files\VST3`, następnie przeskanuj wtyczki w FL Studio. Zachowaj kopię 0.2.0 i projektu przed podmianą. Plik EXE działa samodzielnie: w jego ustawieniach wybierz urządzenie audio i wejście MIDI.
 
-Skala jest wybierana w instrumencie; nie analizujemy harmonii utworu. MIDI dostarcza
-podstawę, długość i dynamikę. Tempo, metrum i pozycja rytmiczna pochodzą z hosta.
-Domyślnie generator zachowuje pozycję frazy przy zmianie nuty; Restart on root uruchamia ją od początku.
-Latch utrzymuje podstawę po NOTE OFF. PANIC wyłącza także latch i czyści bufory FX.
-Pitch bend: +/- 2 półtony. Obsługiwany sustain CC64 i all-notes-off.
+## Szybki start
 
-## Brzmienie
+- Wybierz preset `Rock Pick Bass`, `Gothic Bass`, `Living Landscape`, `Rhythmic Piano` lub `Krell Laboratory`.
+- W FL Studio wpisz długą nutę w Piano Roll. Jej wysokość określa podstawę, a długość — działanie generatora. Note Off zatrzymuje nowe zdarzenia; obwiednie i FX wybrzmiewają.
+- Przy zatrzymanym transporcie użyj `BASS START` i/lub `AMBIENT START`. W BASS / PERFORMANCE ustaw nutę MIDI i tempo odsłuchu. Te parametry są też dostępne w AMBIENT / EVOLUTION.
+- Start hosta wyłącza odsłuch próbny; sterowanie przejmuje MIDI. `PANIC` wyłącza odsłuch i czyści głosy oraz bufory efektów.
 
-- Bas: ACID 303 (inspirowany, nie emulacja obwodu 1:1), SUB 808 strojonym MIDI,
-  Classic Analog (2 oscylatory i sub).
-- Oscylatory basu korzystają z PolyBLEP. Głosy i nieliniowy filtr pracują w 2x częstotliwości.
-- Pady: 12 głosów, 2 silniki na głos, analog saw / PWM / spectral / FM / grain texture.
-  Grain texture jest proceduralnym oscylatorem, nie importerem sampli.
-- Granular FX przetwarza rzeczywisty bufor audio syntezatora, z pitch i freeze.
-- Trzy niezależne racki FX: BASS, AMBIENT i MASTER. Własne bufory, parametry,
-  kolejność i udział efektów; automatyzacja i zapis wszystkich ustawień.
-- Projekty 0.1.0 zachowują brzmienie: stare wspólne ustawienia FX są kopiowane
-  do racka AMBIENT, a udział nowego MASTER pozostaje zerowy.
-- Drive / soft-knee kompresor, chorus / flanger / Juno-inspired, delay sync
-  clean / tape / analog, granular, stereo reverb, width, końcowy soft limiter.
+## BASS
 
-Seed i parametry są zapisywane w projekcie. Bez Evolve fraza basowa jest powtarzalna.
-Ambient jest deterministyczny przy odtworzeniu tego samego przebiegu od początku,
-nie rekonstruuje całej wcześniejszej ewolucji przy skoku w środek utworu.
+Cztery źródła: ACID 303, SUB 808, Classic Analog i Bass guitar. Gitara jest syntezą modalną struny, z artykulacją Finger / Pick / Muted, regulacją jasności i tłumienia; nie jest biblioteką próbek prawdziwej gitary.
 
-## Ograniczenia pierwszego prototypu
+Osiem stylów: Italo Disco, Disco Polo, ACID, Funky, Techno, Rock, Post-punk i 808 / Trap. Trzy warianty każdego stylu zmieniają rozkład akcentów, pauzy, ruch melodyczny i artykulację. Styl jest niezależny od źródła dźwięku. Dostępne są synkopa, swing, gęstość, gate, slide, akcent, humanizacja, długość frazy i przejścia przy włączonym Evolve.
 
-To punkt wyjścia do testów brzmieniowych, nie ukończony instrument produkcyjny.
-Nie ma jeszcze ręcznej edycji kroków, eksportu frazy do MIDI, importu sampli,
-oddzielnych wyjść audio, arpeggiatora akordowego, rotary ani pełnego modelowania
-analogowych obwodów. Metrum wyznacza długość frazy; własny edytor grup akcentów
-(np. 2+2+3) pozostaje do dodania. Parametry są wygładzane audio-rate,
-ale automatykę pobieramy na granicach bloków hosta, bez obietnicy sample-accurate automation.
+`DIRECT` odtwarza własne nuty bez generatora. Sustain CC64, pitch bend +/-2 półtony oraz Note Off działają w syntezie. CC1 zwiększa intensywność artefaktów ambientu; pozostałe parametry można przypisać do kontrolera przez automatykę hosta.
 
-## Build
+## AMBIENT
 
-JUCE 9.0.3, CMake >= 3.24, C++17, Visual Studio 2022:
+- BACKGROUND: Hold / Flow / Krell, dwie barwy na głos, nakładające się obwiednie, prowadzenie głosów, dryf i modulacja filtra oraz proporcji źródeł.
+- RHYTHM: Synth piano / Electric piano / Pluck / Mallet, akordy jednoczesne, rozłożone, arpeggio i naprzemienne; osobny rytm, swing, gate, poziom oraz odpowiedzi w przerwach basu. Synth piano jest barwą syntezowaną, nie fotorealistycznym fortepianem z próbek.
+- KRELL: niezależna warstwa zdarzeń; zmienne wysokości, czasy i obwiednie, osobny czas udziału drugiego oscylatora, różne interwały, FM i filtr. Event interval oznacza sekundy w trybie swobodnym, a ćwierćnuty przy beat sync. Engine 1/2 są wspólne dla tła i zdarzeń; FM jest słyszalne przy silniku FM.
+- EVOLUTION: wolne zmiany, zakres ewolucji, częstość i siła nieregularnych trzasków i ubytków. Artefakty wpływają na suchy tor ambientu, również bez delay. Granular w racku FX przetwarza bufor syntezatora i ma Freeze. Oscylator Grain texture jest proceduralną barwą, nie samplerem.
 
-```
-cmake -S BassAmbient -B build-bass-ambient -G "Visual Studio 17 2022" -A x64
-cmake --build build-bass-ambient --config Release --parallel 2
-ctest --test-dir build-bass-ambient -C Release --output-on-failure
-```
+Każda z trzech warstw ma osobny wyłącznik i poziom. Warstwy korzystają z tego samego wyjściowego racka AMBIENT.
 
-Testy samego silnika nie wymagają JUCE:
+## Generacja, sceny, zapis pomysłu
 
-```
-g++ -std=c++17 -O2 -I BassAmbient/Source BassAmbient/tests/CoreTests.cpp -o bass-ambient-tests
-./bass-ambient-tests
-```
+GENERATE tworzy nowe ziarno i wariant ustawień. MUTATE zmienia tylko część kroków, zależnie od Mutation amount, i delikatnie zmienia barwę. UNDO przywraca poprzedni stan generacji. W BASS / PHRASE dostępne są blokady nut, rytmu, barwy i FX. Blokady dotyczą generowania; nie blokują ręcznej edycji ani automatyki. Ziarna i ustawienia są zapisywane w projekcie. Powtarzalność zakłada tę samą częstotliwość próbkowania i identyczny start transportu/MIDI.
 
-Przed dystrybucją trzeba dobrać odpowiednią licencję JUCE i wykonać odsłuchy oraz testy
-GUI, skalowania, automatyki, zapisu projektu i obciążenia w rzeczywistym FL Studio.
+STORE, następnie A/B/C/D zapisuje komplet ustawień. Naciśnięcie zapisanej sceny przy odtwarzaniu przywołuje ją na następnej granicy taktu; przy zatrzymanym hoście następuje to od razu. Sceny są zapisane wraz z projektem. Parametr Recall scene pozwala automatyzować wybór; MIDI CC20 wybiera A/B/C/D zakresami 0–31 / 32–63 / 64–95 / 96–127. Start i skok transportu resetują generatory oraz historię FX, aby uniknąć poprzednich losowań i wiszących nut.
+
+SAVE MIDI / SAVE WAV eksportuje ostatnie 16 ćwierćnut, maksymalnie 30 sekund. W MIDI bas ma kanał 1, akordy/tło kanał 2, zdarzenia kanał 3. WAV zachowuje brzmienie i efekty. MIDI zachowuje nuty, rytm i velocity; nie zapisuje modulacji DSP, FX ani slide jako nut pośrednich. Metadane tempa MIDI używają tempa z chwili eksportu; przy zmiennym tempie ustaw odpowiednią mapę w docelowym projekcie. W bardzo wolnym tempie bufor może zawierać mniej niż 16 ćwierćnut. Eksportuj bezpośrednio po udanym fragmencie — bufor rejestruje również ciszę.
+
+## GUI i zgodność
+
+BASS jest bursztynowy, AMBIENT turkusowy, FX fioletowy. Trzy główne strony, podsekcje, wektorowe gałki z cieniowaniem i pionowe przewijanie zachowują czytelność od 840 x 600. Kontrolki i racki obsługują automatykę hosta. Zapis schematów 1/2 jest migrowany do nowych ustawień.
+
+Dodanie nowych pozycji do list Model i Style zmienia ich mapowanie znormalizowane: sprawdź starsze klipy automatyki tych dwóch list. Wartości zapisane w samym stanie instrumentu zachowują indeksy starych pozycji.
+
+Testy automatyczne obejmują DSP, pamięć, MIDI, trzy racki, migrację, odsłuch, sceny, eksport i obrazy GUI. Nie zastępują odsłuchu ani testu we właściwym FL Studio. W tej sesji nie przeprowadzono testu w rzeczywistym FL Studio. Jeżeli host usypia wtyczkę podczas odsłuchu przy zatrzymanym transporcie, wyłącz Smart Disable dla tej instancji.
+
+## Budowa
+
+CMake >=3.24, C++17, JUCE 9.0.3. `cmake -S BassAmbient -B build-bass-ambient`, potem kompilacja Release i `ctest`. `BASS_AMBIENT_CORE_ONLY=ON` buduje same testy DSP bez JUCE. Workflow Windows dołącza VST3, EXE i tę instrukcję.

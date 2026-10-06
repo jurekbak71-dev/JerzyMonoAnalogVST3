@@ -119,9 +119,9 @@ public:
         const char* descriptions[]{
             "BASS  /  SOUND - PHRASE - PERFORMANCE",
             "AMBIENT  /  BACKGROUND + RHYTHM + KRELL",
-            "BASS FX: independent processing before the layer sum. Select a module to edit; arrows change its position.",
-            "AMBIENT FX: independent processing before the layer sum. Select a module to edit; arrows change its position.",
-            "MASTER FX: processes the combined layers, before output level and soft limiter. Amount 0 = dry master."};
+            "BASS FX  /  INDEPENDENT RACK",
+            "AMBIENT FX  /  INDEPENDENT RACK",
+            "MASTER FX  /  COMBINED LAYERS"};
         description.setText(descriptions[page],juce::dontSendNotification);
         description.setColour(juce::Label::textColourId,muted);addAndMakeVisible(description);
         generatorHeading.setText("PHRASE GENERATOR / MIDI",juce::dontSendNotification);
@@ -240,7 +240,7 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
     rackSelector.onChange=[this] { selectedRack=rackSelector.getSelectedId()-1;selectPage(2); };
     addAndMakeVisible(rackSelector);
     addAndMakeVisible(viewport);viewport.setScrollBarsShown(true,false);viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
-    presets.addItemList({"Italo Analog","Acid Machine","808 Foundation","Lush Flow","Krell Dust","Bass + Atmosphere"},1);
+    presets.addItemList({"Italo Analog","Acid Machine","808 Foundation","Lush Flow","Krell Dust","Bass + Atmosphere","Rock Pick Bass","Gothic Bass","Living Landscape","Rhythmic Piano","Krell Laboratory"},1);
     presets.setText("Factory scenes",juce::dontSendNotification);presets.onChange=[this]{processor.applyPreset(presets.getSelectedId()-1);};addAndMakeVisible(presets);
     generate.onClick=[this]{processor.generate(false);};addAndMakeVisible(generate);
     mutate.onClick=[this]{processor.generate(true);};addAndMakeVisible(mutate);
@@ -296,7 +296,7 @@ void BassAmbientEditor::timerCallback() {
     int root=processor.rootDisplay.load();float level=processor.peak.load();
     juce::String note=root<0?"--":juce::MidiMessage::getMidiNoteName(root,true,true,3);
     juce::String db=level<.00001f?"-inf":juce::String(juce::Decibels::gainToDecibels(level),1);
-    status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Double-click knob: reset    |    FX: choose rack, then module",juce::dontSendNotification);
+    status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Capture: last 16 beats / max 30 s    |    STORE + A-D: save scene",juce::dontSendNotification);
     for(int k=2;k<5;++k) pages[size_t(k)]->updateOrder();
 }
 

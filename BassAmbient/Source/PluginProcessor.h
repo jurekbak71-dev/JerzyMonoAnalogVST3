@@ -58,7 +58,7 @@ private:
     PerformanceCapture capture;
     double captureTempo=120,previousScenePPQ=0;
     bool haveScenePPQ=false;
-    int hostNum=4,hostDen=4;
+    int hostNum=4,hostDen=4,lastSceneSelection=0;
     void setParameter(const juce::String&,float);
     void applyQueuedScene();
     jerzy::Instrument instrument;

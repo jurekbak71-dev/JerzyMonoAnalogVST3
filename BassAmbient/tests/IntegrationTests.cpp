@@ -104,6 +104,62 @@ int main() {
         }
         racks=processor.readParameters();require(attached&&std::abs(racks.padRack.delayMix-.63)<1e-5&&std::abs(racks.delayMix-.2)<1e-5,"rack GUI connected to correct DSP parameters");
         snapshot("AMBIENT-DELAY");
+        // Independent audition and host takeover, then real file export round-trips.
+        host.playing=false;processor.applyPreset(0);set("bass",0);set("pad",0);
+        processor.auditionBass=true;processor.auditionPad=false;
+        double previewEnergy=0;
+        for(int block=0;block<400;++block){midi.clear();processor.processBlock(audio,midi);previewEnergy+=audio.getMagnitude(0,128);}
+        require(previewEnergy>.01&&processor.rootDisplay.load()==36,"bass preview works with disabled layer and stopped host");
+        host.playing=true;host.ppq=0;midi.addEvent(juce::MidiMessage::noteOn(1,43,.9f),0);processor.processBlock(audio,midi);
+        require(!processor.auditionBass.load()&&processor.rootDisplay.load()==43,"host takes over audition without double root");
+        host.playing=false;processor.processBlock(audio,midi);processor.auditionPad=true;
+        set("rhythmOn",1);set("eventsOn",1);set("backgroundOn",0);set("rhythmDensity",1);
+        for(int block=0;block<200;++block)processor.processBlock(audio,midi);
+        auto midiFile=juce::File::getCurrentWorkingDirectory().getChildFile("capture-test.mid");
+        auto wavFile=juce::File::getCurrentWorkingDirectory().getChildFile("capture-test.wav");juce::String error;
+        require(processor.exportCapture(midiFile,true,error),"MIDI capture export");
+        require(processor.exportCapture(wavFile,false,error),"audio capture export");
+        juce::FileInputStream input(midiFile);juce::MidiFile result;require(result.readFrom(input)&&result.getNumTracks()==1,"valid MIDI round trip");
+        bool notes=false;auto* track=result.getTrack(0);for(int i=0;i<track->getNumEvents();++i)notes|=track->getEventPointer(i)->message.isNoteOn();
+        require(notes,"capture contains performed notes");
+        juce::WavAudioFormat wav;std::unique_ptr<juce::AudioFormatReader> reader(wav.createReaderFor(new juce::FileInputStream(wavFile),true));
+        require(reader&&reader->sampleRate==48000&&reader->numChannels==2&&reader->lengthInSamples>1000,"valid stereo WAV capture");
+        // Scene snapshots survive session reload and are applied on a bar, including FX switches.
+        set("cutoff",654);set("pad_fxGrain",1);set("pad_order0",3);processor.saveScene(0);
+        processor.getStateInformation(state);set("cutoff",8000);processor.setStateInformation(state.getData(),int(state.getSize()));
+        require(processor.hasScene(0),"saved scene survives project state");set("cutoff",8000);
+        host.playing=true;host.ppq=1;processor.processBlock(audio,midi);processor.requestScene(0);
+        host.ppq=1.1;processor.processBlock(audio,midi);require(processor.readParameters().cutoff>7900,"scene waits for bar");
+        host.ppq=3.499;processor.processBlock(audio,midi);require(std::abs(processor.readParameters().cutoff-654)<.1,"scene recalled at 7/8 bar boundary");
+        require(processor.readParameters().padRack.fxGrain&&processor.readParameters().padRack.order[0]==3,"scene recalls FX configuration");
+        processor.generate(false);processor.undoGeneration();require(std::abs(processor.readParameters().cutoff-654)<.1,"generation undo preserves state");
+        // Inspect every ambient subpanel at minimum size.
+        editor->setSize(840,600);tab("AMBIENT");page=viewport->getViewedComponent();
+        for(const auto& name:juce::StringArray{"BACKGROUND","RHYTHM","KRELL","EVOLUTION"}) {
+            for(int i=0;i<page->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(page->getChildComponent(i)))if(button->getButtonText()==name)button->onClick();
+            for(int i=0;i<page->getNumChildComponents();++i)for(int j=i+1;j<page->getNumChildComponents();++j) {
+                auto* a=page->getChildComponent(i);auto* b=page->getChildComponent(j);
+                if(a->isVisible()&&b->isVisible()&&!a->getComponentID().isEmpty()&&!b->getComponentID().isEmpty())require(!a->getBounds().intersects(b->getBounds()),"no control overlap");
+            }
+            snapshot("AMBIENT-"+name+"-840");
+        }
+        // Identical timeline at different host block sizes produces identical audio.
+        auto render=[](int blockSize) {
+            auto synth=std::make_unique<BassAmbientProcessor>();Host timeline;synth->setPlayHead(&timeline);
+            auto put=[&](const char* id,float value){auto* parameter=synth->state.getParameter(id);parameter->setValueNotifyingHost(parameter->convertTo0to1(value));};
+            put("pad",1);put("eventsOn",1);put("rhythmOn",1);put("padAttack",.05f);put("krellRate",.125f);
+            synth->prepareToPlay(48000,blockSize);std::vector<float> samples; samples.reserve(12000);
+            for(int offset=0;offset<12000;) {
+                int length=std::min(blockSize,12000-offset);juce::AudioBuffer<float> block(2,length);juce::MidiBuffer events;
+                if(offset==0)events.addEvent(juce::MidiMessage::noteOn(1,36,1.0f),0);
+                timeline.ppq=double(offset)/24000;synth->processBlock(block,events);
+                for(int i=0;i<length;++i)samples.push_back(block.getSample(0,i));offset+=length;
+            }
+            synth->setPlayHead(nullptr);return samples;
+        };
+        auto small=render(64),large=render(511);double difference=0;
+        for(size_t i=0;i<small.size();++i)difference=std::max(difference,double(std::abs(small[i]-large[i])));
+        require(difference<1e-5,"block-size independent MIDI and generative rendering");
         processor.releaseResources();processor.setPlayHead(nullptr);
         std::cout<<"PASS MIDI, three-rack routing state, legacy migration, GUI attachments, reorder and 15 page/rack snapshots\n";
         return 0;

@@ -88,8 +88,9 @@ bool BassAmbientProcessor::isBusesLayoutSupported(const BusesLayout& buses) cons
 
 void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
-    if(resetRequested.exchange(false)) instrument.reset();
+    if(resetRequested.exchange(false)) {instrument.reset();current=readParameters();}
     audio.clear();auto target=readParameters();
+    if(target.sceneSelect!=lastSceneSelection) {if(target.sceneSelect>0)requestedScene=target.sceneSelect-1;lastSceneSelection=target.sceneSelect;}
     // Structural changes are immediate; continuous controls ramp at audio rate.
     auto previous=current;current=target;
 #define BOOL(f,l,g)
@@ -176,6 +177,18 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 #undef INT
 #undef CHOICE
 #undef CHOICE_DEN
+            current.order=target.order;
+            for(int r=0;r<2;++r) {
+                auto& c=r==0?current.padRack:current.masterRack;const auto& t=r==0?target.padRack:target.masterRack;
+#define BOOL(f,l,g) c.f=t.f;
+#define FLOAT(f,a,b,s,l,g)
+#define CHOICE(f,l,g,c_) c.f=t.f;
+#include "FXParameters.def"
+#undef BOOL
+#undef FLOAT
+#undef CHOICE
+                c.order=t.order;
+            }
         }
         previousScenePPQ=position;haveScenePPQ=true;
         while(event!=end&&(*event).samplePosition<=sample) {
@@ -183,9 +196,10 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
             if(m.isNoteOn()) instrument.noteOn(m.getNoteNumber(),ch,m.getFloatVelocity(),current,position);
             else if(m.isNoteOff()) instrument.noteOff(m.getNoteNumber(),ch,current,position);
             else if(m.isPitchWheel()) instrument.pitchBend(ch,m.getPitchWheelValue());
-            else if(m.isController()) instrument.controller(ch,m.getControllerNumber(),m.getControllerValue(),current,position);
+            else if(m.isController()&&m.getControllerNumber()==20) requestedScene=juce::jlimit(0,3,m.getControllerValue()/32);
             else if(m.isAllSoundOff()) instrument.reset();
             else if(m.isAllNotesOff()) instrument.allOff();
+            else if(m.isController()) instrument.controller(ch,m.getControllerNumber(),m.getControllerValue(),current,position);
             ++event;
         }
         auto renderParameters=current;
@@ -253,6 +267,11 @@ void BassAmbientProcessor::applyPreset(int preset) {
     if(preset==3) { set("bass",0);set("pad",1);set("padMode",1);set("engine1",0);set("engine2",2);set("pad_reverbMix",.5f);set("padAttack",3);set("padRelease",9); }
     if(preset==4) { set("bass",0);set("pad",1);set("padMode",2);set("engine1",3);set("engine2",4);set("pad_fxGrain",1);set("pad_grainPitch",7);set("pad_damage",.35f);set("motion",.7f); }
     if(preset==5) { set("bass",1);set("pad",1);set("model",2);set("padLevel",.25f);set("padAttack",4);set("padRelease",8); }
+    if(preset==6) {set("style",5);set("model",3);set("articulation",1);set("cutoff",3500);set("density",.9f);set("slide",.05f);set("bars",2);set("evolve",1);}
+    if(preset==7) {set("style",6);set("substyle",1);set("model",3);set("articulation",0);set("movement",.8f);set("division",1);set("bassFX",.25f);}
+    if(preset==8) {set("bass",0);set("pad",1);set("rhythmOn",1);set("eventsOn",1);set("padAttack",4);set("padRelease",8);set("backgroundLevel",.65f);set("rhythmLevel",.35f);set("eventsLevel",.25f);set("rhythmSound",1);set("rhythmPattern",1);set("krellRate",1.5f);set("artifactRate",.45f);set("artifactDepth",.4f);}
+    if(preset==9) {set("bass",0);set("pad",1);set("backgroundOn",0);set("rhythmOn",1);set("rhythmSound",0);set("rhythmDensity",.9f);set("rhythmSwing",.22f);set("rhythmPattern",1);set("pad_reverbMix",.2f);}
+    if(preset==10) {set("bass",0);set("pad",1);set("backgroundOn",0);set("eventsOn",1);set("engine1",3);set("engine2",2);set("krellRate",.45f);set("krellAttack",.05f);set("krellRelease",1.2f);set("krellIndependence",1);set("krellFM",.8f);set("artifactRate",.7f);set("artifactDepth",.7f);}
     resetRequested=true;
 }
 void BassAmbientProcessor::setParameter(const juce::String& id,float value) {
@@ -301,7 +320,7 @@ void BassAmbientProcessor::saveScene(int index) {
 void BassAmbientProcessor::applyQueuedScene() {
     int scene=requestedScene.exchange(-1);if(!hasScene(scene))return;
     for(size_t i=0;i<hostParameters.size();++i)hostParameters[i]->setValueNotifyingHost(sceneData[size_t(scene)][i]);
-    activeScene=scene;
+    activeScene=scene;lastSceneSelection=int(state.getRawParameterValue("sceneSelect")->load());
 }
 bool BassAmbientProcessor::exportCapture(const juce::File& file,bool asMidi,juce::String& error) {
     PerformanceCapture::Snapshot snap;

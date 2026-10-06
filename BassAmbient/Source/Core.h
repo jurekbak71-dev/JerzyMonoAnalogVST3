@@ -30,7 +30,7 @@ struct Parameters : FXParameters {
     bool bass=true, pad=false, direct=false, latch=false, restart=false, evolve=false, legato=false;
     int model=0, bassWave=0, style=0, scale=1, division=2, bars=1, meter=0, numerator=4, denominator=4;
     int seed=71, chord=1, padMode=1, engine1=0, engine2=1;
-    int mutation=0;
+    int mutation=0,sceneSelect=0;
     int substyle=0, articulation=0, fillBars=4, phraseSeed=71, rhythmSeed=71, timbreSeed=71;
     bool lockNotes=false, lockRhythm=false, lockTimbre=false, lockFX=false;
     double syncopation=.25, humanize=.15, guitarTone=.55, guitarMute=.25, interaction=0;
@@ -211,6 +211,7 @@ public:
                 for(size_t h=0;h<stringPhase.size();++h) {
                     double harmonicNumber=double(h+1);
                     double stiffness=std::sqrt(1+.000025*harmonicNumber*harmonicNumber);
+                    if(f*harmonicNumber*stiffness>rate*.9)continue;
                     stringPhase[h]+=f*harmonicNumber*stiffness/(rate*2);
                     stringPhase[h]-=std::floor(stringPhase[h]);
                     double pickPosition=p.articulation==1?.14:.28;
@@ -272,7 +273,8 @@ struct PadVoice {
         double period=std::max(.5,p.evolution), pos=age/period;
         uint32_t segment=uint32_t(std::floor(pos));
         double random=smooth(unit(identity,segment)*2-1,unit(identity,segment+1)*2-1,pos-segment);
-        double modulation=p.motion*(.5*random+.5*std::sin(age*.37+pan*3));
+        double longWave=std::sin(2*pi*age/std::max(4.0,p.evolutionBars*2.0)+pan);
+        double modulation=p.motion*(.5*random+.5*std::sin(age*.37+pan*3))+p.evolutionDepth*.3*longWave;
         double cents=p.padDrift*(random*7+std::sin(age*.17+pan)*3);
         double x=0;
         for(int i=0;i<2;++i) {
@@ -466,7 +468,7 @@ class Instrument {
     double nextEvent=0,seconds=0,artifactEnvelope=0,artifactHold=0;
     int bassMidi=-1;
     int64_t rhythmStep=std::numeric_limits<int64_t>::min();
-    std::array<int,4> previousChord{{60,64,67,72}};
+    std::array<int,4> previousChord{{60,64,67,72}},padChord{{60,64,67,72}};
     std::array<double,16> modWheel{};
     int previewMask=0,previewRoot=-1;
     bool midiActive=false;
@@ -488,7 +490,8 @@ private:
         v.attackScale=.15+unit(seed,voiceSerial+11)*2.8;
         v.releaseScale=.3+unit(seed,voiceSerial+12)*2.5;
         v.secondLength=v.lifetime*(.2+1.6*unit(seed,voiceSerial+13));
-        v.secondInterval=p.krellIndependence*(unit(seed,voiceSerial+14)>.5?7:-12);
+        v.secondInterval=unit(seed,voiceSerial+14)<p.krellIndependence?(unit(seed,voiceSerial+18)>.5?7:-12):0;
+        if(unit(seed,voiceSerial+19)>p.harmonic)v.secondInterval+=1;
         v.fmDepth=p.krellFM*6*unit(seed,voiceSerial+15);
         v.cutoffScale=std::exp2((unit(seed,voiceSerial+16)*2-1)*p.krellRange*2);
         v.blendOffset=(unit(seed,voiceSerial+17)-.5)*p.krellIndependence;
@@ -551,6 +554,12 @@ private:
             double n=ambientRoot()+chords[clamp(p.chord,0,4)][i];
             while(n<48) n+=12;
             while(n>84) n-=12;
+            if(p.padMode!=2) {
+                while(n-padChord[size_t(i)]>6&&n>48)n-=12;
+                while(padChord[size_t(i)]-n>6&&n<84)n+=12;
+                if(p.padMode==1&&unit(uint32_t(p.seed),voiceSerial+101)<p.evolutionDepth*.3)n+=i%2?12:-12;
+                n=clamp(n,48.0,84.0);padChord[size_t(i)]=int(n);
+            }
             if(p.padMode==2) n+=12*(unit(uint32_t(p.seed),++voiceSerial)>.8?1:0);
             releasePad(*selected);
             selected->start(n,-.8+i*.53,hash(uint32_t(p.lockTimbre?p.timbreSeed:p.seed)^++voiceSerial),velocity);
@@ -573,8 +582,8 @@ private:
             velocity=latest?latest->velocity:velocity;
             if(root>=0) {
                 if(p.restart) { anchor=ppq;lastStep=std::numeric_limits<int64_t>::min(); }
-                if(p.direct) bassNote(root,velocity,p.legato&&overlapping,false);
-                else { bassNote(root,velocity,false,false);gateUntil=ppq+divisionBeats(p.division)*p.gate;previousSlide=false; }
+                if(p.direct&&p.bass) bassNote(root,velocity,p.legato&&overlapping,false);
+                else if(p.bass) { bassNote(root,velocity,false,false);gateUntil=ppq+divisionBeats(p.division)*p.gate;previousSlide=false; }
                 if(p.pad&&p.backgroundOn) startPad(p,true);
             } else { bassOff();for(auto& v:pads) releasePad(v);for(auto& v:events)releasePad(v,3);previousSlide=false; }
         } else if(latest) velocity=latest->velocity;
@@ -589,7 +598,7 @@ public:
         previousBass=true;previousPad=false;previousDirect=false;
         for(auto& v:events) {v.env.reset();v.fl.reset();v.a={};v.b={};}
         struck={};nextEvent=seconds=artifactEnvelope=artifactHold=0;artifactCounter=0;bassMidi=-1;
-        rhythmStep=std::numeric_limits<int64_t>::min();previousChord={{60,64,67,72}};
+        rhythmStep=std::numeric_limits<int64_t>::min();previousChord={{60,64,67,72}};padChord=previousChord;
         previewMask=0;previewRoot=-1;midiActive=false;modWheel.fill(0);
     }
     void setPreview(bool b,bool a,int note,const Parameters& p,double ppq) {
@@ -616,7 +625,7 @@ public:
         auto& h=held[size_t((channel-1)*128+note)];h={note,channel,clamp(v,0.0,1.0),++serial,true,false};
         chooseRoot(p,ppq);
         // Repeated same-pitch MIDI notes still articulate in DIRECT mode.
-        if(p.direct&&sameRoot) bassNote(note,v,p.legato,false);
+        if(p.direct&&p.bass&&sameRoot) bassNote(note,v,p.legato,false);
     }
     void noteOff(int note,int channel,const Parameters& p,double ppq) {
         if(note<0||note>127||channel<1||channel>16) return;
@@ -637,9 +646,9 @@ public:
     void pitchBend(int channel,int value) { if(channel>=1&&channel<=16) bend[size_t(channel-1)]=double(value-8192)/8192*2; }
     void beginBlock(double ppq,double tempo,bool playing) {
         bpm=clamp(tempo,20.0,400.0);
-        if(havePosition && playing && (ppq<lastPPQ-.001 || ppq-lastPPQ>.25)) {
-            // Host seek/loop: no stale keys or hanging scheduled gates. FX tails survive.
-            allOff();lastStep=std::numeric_limits<int64_t>::min();anchor=0;
+        if(playing && (!wasPlaying || (havePosition&&(ppq<lastPPQ-.001 || ppq-lastPPQ>.25)))) {
+            // Repeatable host start / loop: no stale notes, stochastic phases or FX history.
+            allOff();reset();bpm=clamp(tempo,20.0,400.0);
         }
         if(wasPlaying&&!playing) allOff();
         wasPlaying=playing;havePosition=true;lastPPQ=ppq;
@@ -653,7 +662,7 @@ public:
         }
         previousPad=p.pad;previousBass=p.bass;previousDirect=p.direct;
         bool bassHit=false;
-        if(!p.direct&&bassRoot()>=0) {
+        if(!p.direct&&p.bass&&bassRoot()>=0) {
             double pos=ppq-(p.restart?anchor:0);
             int64_t pair=int64_t(std::floor(pos/(period*2)));
             double inside=pos-double(pair)*period*2;
