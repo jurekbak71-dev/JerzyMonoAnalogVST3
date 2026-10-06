@@ -15,6 +15,8 @@ int main() {
         juce::ScopedJuceInitialiser_GUI init;
         BassAmbientProcessor processor;Host host;processor.setPlayHead(&host);processor.prepareToPlay(48000,128);
         auto set=[&](const char* id,float v) { auto* p=processor.state.getParameter(id);require(p!=nullptr,"parameter missing");p->setValueNotifyingHost(p->convertTo0to1(v)); };
+        require(dynamic_cast<juce::AudioParameterChoice*>(processor.state.getParameter("model"))->choices.size()==3,"legacy model automation range");
+        require(dynamic_cast<juce::AudioParameterChoice*>(processor.state.getParameter("style"))->choices.size()==5,"legacy style automation range");
         auto specs=parameterSpecs();require(processor.getParameters().size()==int(specs.size()),"host parameter count");
         for(const auto& s:specs) require(processor.state.getRawParameterValue(s.id)!=nullptr,"unbound parameter");
         juce::AudioBuffer<float> audio(2,128);juce::MidiBuffer midi;
@@ -29,7 +31,7 @@ int main() {
         require(std::abs(processor.state.getRawParameterValue("cutoff")->load()-731)<.01f,"cutoff state restore");
         require(processor.state.getRawParameterValue("seed")->load()==4321,"seed state restore");
         require(processor.readParameters().order[0]==4,"FX order state restore");
-        for(int k=0;k<6;++k) { processor.applyPreset(k);auto p=processor.readParameters();require(p.seed==71,"factory preset complete reset"); }
+        for(int k=0;k<11;++k) { processor.applyPreset(k);auto p=processor.readParameters();require(p.seed==71,"factory preset complete reset"); }
         set("delayMix",.11f);set("pad_delayMix",.37f);set("master_delayMix",.61f);
         set("pad_order0",4);set("pad_order4",0);set("masterFX",.7f);
         processor.getStateInformation(state);processor.applyPreset(0);

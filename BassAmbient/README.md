@@ -42,7 +42,7 @@ SAVE MIDI / SAVE WAV eksportuje ostatnie 16 ćwierćnut, maksymalnie 30 sekund. 
 
 BASS jest bursztynowy, AMBIENT turkusowy, FX fioletowy. Trzy główne strony, podsekcje, wektorowe gałki z cieniowaniem i pionowe przewijanie zachowują czytelność od 840 x 600. Kontrolki i racki obsługują automatykę hosta. Zapis schematów 1/2 jest migrowany do nowych ustawień.
 
-Dodanie nowych pozycji do list Model i Style zmienia ich mapowanie znormalizowane: sprawdź starsze klipy automatyki tych dwóch list. Wartości zapisane w samym stanie instrumentu zachowują indeksy starych pozycji.
+Stare listy Synth model i Classic style zachowują pozycje oraz zakres automatyki z 0.2.0. Nowe wybory mają osobne parametry: Bass instrument przełącza syntezator/gitarę, a Style family wybiera style klasyczne / Rock / Post-punk / 808-Trap. Przy wyborze gitary lista modelu syntezatora jest nieaktywna; podobnie Classic style poza rodziną klasyczną.
 
 Testy automatyczne obejmują DSP, pamięć, MIDI, trzy racki, migrację, odsłuch, sceny, eksport i obrazy GUI. Nie zastępują odsłuchu ani testu we właściwym FL Studio. W tej sesji nie przeprowadzono testu w rzeczywistym FL Studio. Jeżeli host usypia wtyczkę podczas odsłuchu przy zatrzymanym transporcie, wyłącz Smart Disable dla tej instancji.
 

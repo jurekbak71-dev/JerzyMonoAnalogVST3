@@ -131,6 +131,7 @@ public:
             const char* padNames[]{"BACKGROUND","RHYTHM","KRELL","EVOLUTION"};
             auto& button=sections[size_t(i)];button.setButtonText(index==0?bassNames[i]:padNames[i]);
             button.setColour(juce::TextButton::textColourOnId,sectionColour(index));
+            button.setColour(juce::TextButton::buttonOnColourId,sectionColour(index).withAlpha(.2f));
             button.onClick=[this,i]{selectedSection=i;if(layoutChanged)layoutChanged();};addAndMakeVisible(button);
         }
         int module=-1;
@@ -160,10 +161,16 @@ public:
                 if(index==4) include|=spec.id=="master"||spec.id=="limiter";
             }
             if(!include) continue;
-            
+
             auto control=std::make_unique<Control>(processor,spec,index==0?0:index==1?1:2);
             control->setComponentID(spec.id);addAndMakeVisible(*control);
             controls.push_back({std::move(control),itemModule,itemSection});
+        }
+        if(index==0) {
+            std::stable_sort(controls.begin(),controls.end(),[](const auto& a,const auto& b){
+                auto rank=[](const auto& item){auto id=item.control->getComponentID();return id=="source"||id=="styleFamily"?0:1;};
+                return rank(a)<rank(b);
+            });
         }
         if(isFX()) for(int k=0;k<6;++k) {
             addAndMakeVisible(modules[size_t(k)]);
@@ -180,7 +187,14 @@ public:
         updateOrder();
     }
     void updateOrder() {
-        if(!isFX()) return;
+        if(!isFX()) {
+            for(auto& item:controls) {
+                auto id=item.control->getComponentID();
+                if(id=="model")item.control->setEnabled(processor.state.getRawParameterValue("source")->load()<.5f);
+                if(id=="style")item.control->setEnabled(processor.state.getRawParameterValue("styleFamily")->load()<.5f);
+            }
+            return;
+        }
         const char* names[]{"DRIVE / COMP","CHORUS","DELAY","GRANULAR","REVERB","WIDTH"};
         for(int k=0;k<6;++k) {
             const int id=slotModule(k);
@@ -263,7 +277,7 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
 BassAmbientEditor::~BassAmbientEditor() { stopTimer();viewport.setViewedComponent(nullptr,false);setLookAndFeel(nullptr); }
 BassAmbientEditor::Page& BassAmbientEditor::currentPage() { return *pages[size_t(selected==2?2+selectedRack:selected)]; }
 void BassAmbientEditor::selectPage(int index) {
-    selected=index;for(int k=0;k<3;++k) {tabs[size_t(k)].setToggleState(k==index,juce::dontSendNotification);tabs[size_t(k)].setColour(juce::TextButton::textColourOnId,sectionColour(k));}
+    selected=index;for(int k=0;k<3;++k) {tabs[size_t(k)].setToggleState(k==index,juce::dontSendNotification);tabs[size_t(k)].setColour(juce::TextButton::textColourOnId,sectionColour(k));tabs[size_t(k)].setColour(juce::TextButton::buttonOnColourId,sectionColour(k).withAlpha(.2f));}
     rackSelector.setVisible(index==2);
     viewport.setViewedComponent(&currentPage(),false);resized();viewport.setViewPosition(0,0);
 }
@@ -297,7 +311,7 @@ void BassAmbientEditor::timerCallback() {
     juce::String note=root<0?"--":juce::MidiMessage::getMidiNoteName(root,true,true,3);
     juce::String db=level<.00001f?"-inf":juce::String(juce::Decibels::gainToDecibels(level),1);
     status.setText("MIDI root: "+note+"    |    Output peak: "+db+" dBFS    |    Capture: last 16 beats / max 30 s    |    STORE + A-D: save scene",juce::dontSendNotification);
-    for(int k=2;k<5;++k) pages[size_t(k)]->updateOrder();
+    for(int k=0;k<5;++k) pages[size_t(k)]->updateOrder();
 }
 
 void BassAmbientEditor::exportPerformance(bool midi) {

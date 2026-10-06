@@ -30,7 +30,7 @@ struct Parameters : FXParameters {
     bool bass=true, pad=false, direct=false, latch=false, restart=false, evolve=false, legato=false;
     int model=0, bassWave=0, style=0, scale=1, division=2, bars=1, meter=0, numerator=4, denominator=4;
     int seed=71, chord=1, padMode=1, engine1=0, engine2=1;
-    int mutation=0,sceneSelect=0;
+    int mutation=0,sceneSelect=0,source=0,styleFamily=0;
     int substyle=0, articulation=0, fillBars=4, phraseSeed=71, rhythmSeed=71, timbreSeed=71;
     bool lockNotes=false, lockRhythm=false, lockTimbre=false, lockFX=false;
     double syncopation=.25, humanize=.15, guitarTone=.55, guitarMute=.25, interaction=0;
@@ -135,7 +135,8 @@ inline Step makeStep(const Parameters& p,int64_t index,int count) {
         {1,.65,.8,.4,.85,.7,.5,.9,.8,.5,.9,.7,.5,.85,.6,.8},
         {1,.15,.45,.9,.2,.65,.95,.3,.7,.2,.85,.4,.15,.9,.3,.75},
         {1,.2,.7,.2,1,.3,.65,.2,1,.2,.7,.2,1,.3,.7,.4}};
-    int style=clamp(p.style,0,4);
+    int chosenStyle=p.styleFamily>0?4+p.styleFamily:p.style;
+    int style=clamp(chosenStyle,0,4);
     uint32_t noteSalt=uint32_t(p.lockNotes?p.phraseSeed:p.seed)^hash(p.lockNotes?0:cycle);
     uint32_t rhythmSalt=uint32_t(p.lockRhythm?p.rhythmSeed:p.seed)^hash(p.lockRhythm?0:cycle);
     if(p.mutation>0&&unit(uint32_t(p.seed),uint32_t(k)*47+90)<p.variation) {
@@ -148,25 +149,25 @@ inline Step makeStep(const Parameters& p,int64_t index,int count) {
     if(unit(salt,k*11+2)<p.variation*p.movement) s.degree=int(unit(salt,k*11+3)*7);
     s.rest=unit(rhythmSalt,k*11+4)>clamp(p.density*weights[style][m]*1.3,0.0,1.0);
     if(k==0 && p.density>0) s.rest=false;
-    s.accent=unit(salt,k*11+5)<p.accent*(m%4==0?1.0:.65);
-    s.slide=unit(salt,k*11+6)<p.slide && !s.rest;
-    s.velocity=s.accent?1.0:(style==3?.45+.4*unit(salt,k*11+7):.75);
+    s.accent=unit(rhythmSalt,k*11+5)<p.accent*(m%4==0?1.0:.65);
+    s.slide=unit(rhythmSalt,k*11+6)<p.slide && !s.rest;
+    s.velocity=s.accent?1.0:(style==3?.45+.4*unit(rhythmSalt,k*11+7):.75);
     s.length=clamp(p.gate*(style==3?.65:1.0),.03,1.0);
     // Substyles transform the motif, accent grid and articulation independently of the sound.
     const int variant=clamp(p.substyle,0,2);
     const bool response=k>=count/2, ending=k>=count-std::max(2,count/8);
     const bool fill=p.evolve&&p.fillBars>0 && ((index/count+1)%p.fillBars==0);
-    if(p.style>=5) {
+    if(chosenStyle>=5) {
         static constexpr int rock[3][8]={{0,0,0,0,4,4,0,0},{0,0,0,2,0,0,4,3},{0,2,4,2,0,6,4,2}};
         static constexpr int post[3][8]={{0,0,0,0,0,0,0,0},{0,2,4,6,4,2,0,-1},{0,0,4,3,0,6,4,2}};
-        s.degree=(p.style==5?rock[variant][k%8]:p.style==6?post[variant][k%8]:0);
+        s.degree=(chosenStyle==5?rock[variant][k%8]:chosenStyle==6?post[variant][k%8]:0);
         if(unit(noteSalt,k*13+40)>p.movement) s.degree=0;
-        double weight=p.style==7?(k%8==0?1.0:.18+.5*variant):(k%2==0?1.0:.15+.22*variant);
+        double weight=chosenStyle==7?(k%8==0?1.0:.18+.5*variant):(k%2==0?1.0:.15+.22*variant);
         s.rest=unit(rhythmSalt,k*13+41)>p.density*weight*1.3;
-        s.octave=(p.style==6&&variant==1&&k%8==4)?1:0;
+        s.octave=(chosenStyle==6&&variant==1&&k%8==4)?1:0;
         s.velocity=k%4==0?1.0:.7;
-        s.slide=unit(rhythmSalt,k*13+42)<p.slide*(p.style==7?1:.25);
-        s.length=p.gate*(p.style==7?1.0:variant==1?.65:.85);
+        s.slide=unit(rhythmSalt,k*13+42)<p.slide*(chosenStyle==7?1:.25);
+        s.length=p.gate*(chosenStyle==7?1.0:variant==1?.65:.85);
     } else if(variant>0) {
         if(variant==1&&response&&unit(noteSalt,k*17+49)<p.movement) s.degree+=2;
         if(variant==2) {
@@ -198,6 +199,7 @@ public:
     void off() { env.off();connected=false; }
     double next(const Parameters& p,double bend) {
         if(!env.active()) return 0;
+        int model=p.source==1?3:p.model;
         double amp=env.next(p.bassAttack,p.bassDecay,p.bassSustain,p.bassRelease);
         double glideTime=connected?p.glide:.001;
         pitch+=(target-pitch)*(1-std::exp(-1/(rate*std::max(glideTime,.001))));
@@ -205,7 +207,7 @@ public:
         double result=0;
         for(int i=0;i<2;++i) {
             const double f=hz(pitch+bend);
-            if(p.model==3) {
+            if(model==3) {
                 // Dispersive modal string: finger/pick/muted excitation and velocity-dependent damping.
                 double string=0;
                 for(size_t h=0;h<stringPhase.size();++h) {
@@ -225,7 +227,7 @@ public:
                 double scrape=std::sin(elapsed*21341)*std::sin(elapsed*17321)*std::exp(-elapsed/.007);
                 double x=string+scrape*(p.articulation==1?.1:.025)*velocity;
                 result+=filter.process(x,p.cutoff*(1+p.guitarTone*3),p.resonance*.4,rate*2,p.drive);
-            } else if(p.model==1) {
+            } else if(model==1) {
                 const double sweep=24*std::exp(-elapsed/.012);
                 double body=o1.next(hz(pitch+bend+sweep),rate*2,2);
                 double click=std::sin(2*pi*1800*elapsed)*std::exp(-elapsed/.0025)*.22;
@@ -234,7 +236,7 @@ public:
                 result+=filter.process(x,fc,p.resonance,rate*2,p.drive*.3);
             } else {
                 double x=o1.next(f,rate*2,p.bassWave,p.pulse);
-                if(p.model==2) x=.6*x+.4*o2.next(f*1.003,rate*2,1-p.bassWave,p.pulse);
+                if(model==2) x=.6*x+.4*o2.next(f*1.003,rate*2,1-p.bassWave,p.pulse);
                 x=x*.7+subOsc.next(f*.5,rate*2,2)*p.sub*.45;
                 double fc=p.cutoff*std::exp2(filterLevel*p.filterEnv*(accented?5.5:4));
                 result+=filter.process(x,fc,p.resonance,rate*2,p.drive);
@@ -510,7 +512,7 @@ private:
         if(unit(seed,voiceSerial+24)>p.harmonic) n+=1;
         n=clamp(n,36.0,96.0);
         releasePad(*v,3);
-        v->start(n,unit(seed,voiceSerial+25)*2-1,hash(seed^voiceSerial),velocity);
+        v->start(n,unit(seed,voiceSerial+25)*2-1,hash(uint32_t(p.lockTimbre?p.timbreSeed:p.seed)^voiceSerial),velocity);
         v->lifetime=.1+p.krellRate*(.3+unit(seed,voiceSerial+26)*1.7);
         configureKrell(*v,p);observe(int(n),3,velocity,-1);
     }
@@ -663,7 +665,7 @@ public:
         previousPad=p.pad;previousBass=p.bass;previousDirect=p.direct;
         bool bassHit=false;
         if(!p.direct&&p.bass&&bassRoot()>=0) {
-            double pos=ppq-(p.restart?anchor:0);
+            double pos=ppq-(p.restart?anchor:0)+1e-10;
             int64_t pair=int64_t(std::floor(pos/(period*2)));
             double inside=pos-double(pair)*period*2;
             int64_t step=pair*2+(inside>=period*(1+p.swing*.5)?1:0);
@@ -674,12 +676,12 @@ public:
                 if(!s.rest) {
                     int n=bassRoot()+scaleOffset(s.degree,p.scale)+12*s.octave;
                     bassNote(n,velocity*s.velocity,previousSlide,s.accent);bassHit=true;
-                    
+
                     gateUntil=ppq+period*s.length;previousSlide=s.slide;
                 } else { bassOff();previousSlide=false;gateUntil=-1; }
                 lastStep=step;
             }
-            if(gateUntil>=0&&ppq>=gateUntil&&!previousSlide) { bassOff();gateUntil=-1; }
+            if(gateUntil>=0&&ppq+1e-10>=gateUntil&&!previousSlide) { bassOff();gateUntil=-1; }
         }
         if(ambientRoot()>=0&&p.pad&&p.backgroundOn) {
             bool active=false;for(auto& v:pads) if(v.env.active()&&!v.releasing) active=true;
@@ -718,8 +720,9 @@ public:
         for(auto& v:events) if(v.env.active()&&!v.releasing&&(v.age>=v.lifetime||!p.eventsOn||ambientRoot()<0))releasePad(v,3);
         if(p.pad&&p.rhythmOn&&ambientRoot()>=0) {
             double d=divisionBeats(p.rhythmDivision);
-            int64_t pair=int64_t(std::floor(ppq/(2*d)));
-            int64_t step=pair*2+((ppq-pair*2*d)>=d*(1+p.rhythmSwing*.5)?1:0);
+            double quantisedPPQ=ppq+1e-10;
+            int64_t pair=int64_t(std::floor(quantisedPPQ/(2*d)));
+            int64_t step=pair*2+((quantisedPPQ-pair*2*d)>=d*(1+p.rhythmSwing*.5)?1:0);
             if(step!=rhythmStep) {playRhythm(p,step,d,bassHit);rhythmStep=step;}
         }
         if(!p.backgroundOn) for(auto& v:pads)releasePad(v);

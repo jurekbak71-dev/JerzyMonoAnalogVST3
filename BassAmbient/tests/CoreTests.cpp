@@ -107,7 +107,7 @@ int main() {
     {
         Parameters a;a.lockNotes=true;a.lockRhythm=true;a.phraseSeed=a.seed;a.rhythmSeed=a.seed;
         Parameters b=a;b.seed=901;b.mutation=5;
-        for(int i=0;i<32;++i){auto x=makeStep(a,i,32),y=makeStep(b,i,32);check(x.degree==y.degree&&x.rest==y.rest&&x.octave==y.octave,"locked note/rhythm survive generation");}
+        for(int i=0;i<32;++i){auto x=makeStep(a,i,32),y=makeStep(b,i,32);check(x.degree==y.degree&&x.rest==y.rest&&x.octave==y.octave&&x.slide==y.slide&&x.accent==y.accent&&x.velocity==y.velocity,"locked note/rhythm survive generation");}
         a=Parameters{};a.variation=.25;b=a;b.mutation=1;int changes=0;
         for(int i=0;i<64;++i){auto x=makeStep(a,i,64),y=makeStep(b,i,64);changes+=x.degree!=y.degree||x.rest!=y.rest||x.slide!=y.slide;}
         check(changes>0&&changes<32,"mutation preserves most of motif");

@@ -44,7 +44,7 @@ BassAmbientProcessor::BassAmbientProcessor()
     : AudioProcessor(BusesProperties().withOutput("Stereo output",juce::AudioChannelSet::stereo(),true)),
       state(*this,nullptr,"JerzyBassAmbient",layout()) {
     for(const auto& s:parameterSpecs()) {values.push_back(state.getRawParameterValue(s.id));hostParameters.push_back(state.getParameter(s.id));}
-    for(auto& scene:sceneData)scene.resize(values.size());
+    for(auto& scene:sceneData)scene=std::make_unique<std::atomic<float>[]>(values.size());
     instrument.observer=[](void* context,int n,int ch,double v,double duration) {
         auto* self=static_cast<BassAmbientProcessor*>(context);
         self->capture.note(n,ch,v,duration<0?duration:duration*self->captureTempo/60);
@@ -219,7 +219,7 @@ void BassAmbientProcessor::getStateInformation(juce::MemoryBlock& output) {
     juce::ValueTree scenes("SCENES");
     for(int k=0;k<4;++k)if(sceneReady[size_t(k)].load()) {
         juce::ValueTree scene("SCENE");scene.setProperty("slot",k,nullptr);
-        for(size_t i=0;i<hostParameters.size();++i)scene.setProperty(hostParameters[i]->paramID,sceneData[size_t(k)][i],nullptr);
+        for(size_t i=0;i<hostParameters.size();++i)scene.setProperty(hostParameters[i]->paramID,sceneData[size_t(k)][i].load(),nullptr);
         scenes.appendChild(scene,nullptr);
     }
     tree.appendChild(scenes,nullptr);
@@ -267,8 +267,8 @@ void BassAmbientProcessor::applyPreset(int preset) {
     if(preset==3) { set("bass",0);set("pad",1);set("padMode",1);set("engine1",0);set("engine2",2);set("pad_reverbMix",.5f);set("padAttack",3);set("padRelease",9); }
     if(preset==4) { set("bass",0);set("pad",1);set("padMode",2);set("engine1",3);set("engine2",4);set("pad_fxGrain",1);set("pad_grainPitch",7);set("pad_damage",.35f);set("motion",.7f); }
     if(preset==5) { set("bass",1);set("pad",1);set("model",2);set("padLevel",.25f);set("padAttack",4);set("padRelease",8); }
-    if(preset==6) {set("style",5);set("model",3);set("articulation",1);set("cutoff",3500);set("density",.9f);set("slide",.05f);set("bars",2);set("evolve",1);}
-    if(preset==7) {set("style",6);set("substyle",1);set("model",3);set("articulation",0);set("movement",.8f);set("division",1);set("bassFX",.25f);}
+    if(preset==6) {set("styleFamily",1);set("source",1);set("articulation",1);set("cutoff",3500);set("density",.9f);set("slide",.05f);set("bars",2);set("evolve",1);}
+    if(preset==7) {set("styleFamily",2);set("substyle",1);set("source",1);set("articulation",0);set("movement",.8f);set("division",1);set("bassFX",.25f);}
     if(preset==8) {set("bass",0);set("pad",1);set("rhythmOn",1);set("eventsOn",1);set("padAttack",4);set("padRelease",8);set("backgroundLevel",.65f);set("rhythmLevel",.35f);set("eventsLevel",.25f);set("rhythmSound",1);set("rhythmPattern",1);set("krellRate",1.5f);set("artifactRate",.45f);set("artifactDepth",.4f);}
     if(preset==9) {set("bass",0);set("pad",1);set("backgroundOn",0);set("rhythmOn",1);set("rhythmSound",0);set("rhythmDensity",.9f);set("rhythmSwing",.22f);set("rhythmPattern",1);set("pad_reverbMix",.2f);}
     if(preset==10) {set("bass",0);set("pad",1);set("backgroundOn",0);set("eventsOn",1);set("engine1",3);set("engine2",2);set("krellRate",.45f);set("krellAttack",.05f);set("krellRelease",1.2f);set("krellIndependence",1);set("krellFM",.8f);set("artifactRate",.7f);set("artifactDepth",.7f);}
@@ -319,7 +319,7 @@ void BassAmbientProcessor::saveScene(int index) {
 }
 void BassAmbientProcessor::applyQueuedScene() {
     int scene=requestedScene.exchange(-1);if(!hasScene(scene))return;
-    for(size_t i=0;i<hostParameters.size();++i)hostParameters[i]->setValueNotifyingHost(sceneData[size_t(scene)][i]);
+    for(size_t i=0;i<hostParameters.size();++i)hostParameters[i]->setValueNotifyingHost(sceneData[size_t(scene)][i].load());
     activeScene=scene;lastSceneSelection=int(state.getRawParameterValue("sceneSelect")->load());
 }
 bool BassAmbientProcessor::exportCapture(const juce::File& file,bool asMidi,juce::String& error) {

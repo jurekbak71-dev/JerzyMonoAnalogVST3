@@ -51,7 +51,7 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     std::vector<std::atomic<float>*> values;
     std::vector<juce::RangedAudioParameter*> hostParameters;
-    std::array<std::vector<float>,4> sceneData;
+    std::array<std::unique_ptr<std::atomic<float>[]>,4> sceneData;
     std::array<std::atomic<bool>,4> sceneReady{};
     juce::MemoryBlock undoState;
     std::array<bool,3> lastLocks{};
