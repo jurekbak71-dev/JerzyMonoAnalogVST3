@@ -110,9 +110,7 @@ private:
     void drawSection(juce::Graphics&,const Section&) const;
     void drawLabelBox(juce::Graphics&,const juce::String&,float,float,float) const;
     void drawEnvelope(juce::Graphics&,juce::Rectangle<float>,bool) const;
-    void setArpPanelVisible(bool);
     void setMainPage(int page);
-    void setSynthControlsVisible(bool);
     void updateGridControls();
     float scale() const noexcept {return getWidth()/1440.0f;}
     float topHeight() const noexcept {return 720.0f*scale();}
@@ -122,12 +120,12 @@ private:
     std::vector<Section> sections;
 
     juce::Label title,subtitle,preset;
-    juce::TextButton arpPanelButton;
-    juce::TextButton pageButton;
+    std::array<juce::TextButton,6> pageButtons;
     juce::ToggleButton gridSeqOn,gridMidiTrigger,gridHostSync;
     juce::TextButton gridModeButton,gridClearButton;
-    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection;
-    ResetSlider gridGate,gridSwing,gridVelocity;
+    juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection,gridOctave;
+    ResetSlider gridGate,gridSwing,gridVelocity,gridProbability;
+    juce::ComboBox gridRatchet;
     PadGrid padGrid;
     MonoFxPanel fxPanel;
 
@@ -149,7 +147,7 @@ private:
 
     std::unique_ptr<ComboAttachment> osc1WaveA,osc1OctA,osc2WaveA,osc2OctA,subWaveA,lfoWaveA,lfoDivisionA,glideModeA,priorityA;
     std::unique_ptr<ComboAttachment> arpDivisionA,arpPatternA,arpRhythmA,arpOctavesA;
-    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA;
+    std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA,gridOctaveA;
     std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
     std::unique_ptr<ComboAttachment> filterModeA;
     std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
@@ -157,11 +155,12 @@ private:
     std::unique_ptr<SliderAttachment> aAA,aDA,aSA,aRA,fAA,fDA,fSA,fRA;
     std::unique_ptr<SliderAttachment> lfoRateA,lfoPitchA,lfoFilterA,lfoPWMA,lfoAmpA,lfoFadeA;
     std::unique_ptr<SliderAttachment> glideA,outDriveA,masterA,arpGateA,arpSwingA,arpVelocityA,gridGateA,gridSwingA,gridVelocityA;
+    std::unique_ptr<SliderAttachment> gridProbabilityA;
+    std::unique_ptr<ComboAttachment> gridRatchetA;
     std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA,gridHostSyncA,arpHostSyncA;
 
-    bool arpPanelOpen=false;
+    int modulePage=0;
     bool padsPage=false;
     bool fxPage=false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessorEditor)
 };
-

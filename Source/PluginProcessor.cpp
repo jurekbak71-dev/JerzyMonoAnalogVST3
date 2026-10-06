@@ -39,6 +39,7 @@ void JerzyMonoAnalogAudioProcessor::prepareToPlay(double sr, int bs)
     lastArpHostStep=-1; lastGridHostStep=-1;
     gridGlobalStep=0;
     gridCurrentNote=-1;
+    gridStepNote=-1;gridStepActive=false;gridRatchetIndex=0;gridRatchetCount=1;
     gridPlayColumn.store(-1);
 }
 
@@ -48,6 +49,7 @@ void JerzyMonoAnalogAudioProcessor::resetArpState()
     arpStep = 0;
     arpCurrentNote = -1;
     arpUpDownPos = 0;
+    arpLastRandomIndex = -1;
     arpHeldNotes.clear();
     arpLatchedNotes.clear();
     physicalHeldNotes.clear();
@@ -96,7 +98,11 @@ int JerzyMonoAnalogAudioProcessor::gridNoteForRow(int row) const
     };
     const int scale = juce::jlimit(0,7,getChoiceIndex("gridScale"));
     const int degree = juce::jlimit(0,7,7-row);
-    return juce::jlimit(0,127,gridRootMidiFromChoice()+scales[scale][degree]);
+    const int gridRoot=gridRootMidiFromChoice();
+    const bool midiTranspose=apvts.getRawParameterValue("gridMidiTrigger")->load()>0.5f && gridMidiRunning.load();
+    const int base=midiTranspose?gridTriggerNote.load():gridRoot;
+    const int octave=getChoiceIndex("gridOctave")-2;
+    return juce::jlimit(0,127,base+scales[scale][degree]+12*octave);
 }
 
 void JerzyMonoAnalogAudioProcessor::launchPadNoteOn(int padIndex)
@@ -146,12 +152,15 @@ void JerzyMonoAnalogAudioProcessor::processGridSequencerSample(double bpm, int s
     bool gridHostStepChanged=false;
     if(hostSync && hostHasPpq)
     {
-        const int hostStep=(int)std::floor((hostPpq+1.0e-9)/stepQuarter);
+        const double origin=(midiTrigger && gridMidiRunning.load())?gridHostPpqOrigin:0.0;
+        const int hostStep=(int)std::floor((hostPpq-origin+1.0e-9)/stepQuarter);
         if(hostStep!=lastGridHostStep){lastGridHostStep=hostStep;gridGlobalStep=juce::jmax(0,hostStep)%totalSteps;gridSamplesToNext=stepSamples;gridHostStepChanged=true;}
     }
     const double gate=juce::jlimit(0.05f,0.98f,apvts.getRawParameterValue("gridGate")->load());
     const double swing=hostSync ? 0.0 : juce::jlimit(0.0f,0.49f,apvts.getRawParameterValue("gridSwing")->load());
     const float velocity=juce::jlimit(0.01f,1.0f,apvts.getRawParameterValue("gridVelocity")->load());
+    const float probability=juce::jlimit(0.0f,1.0f,apvts.getRawParameterValue("gridProbability")->load());
+    gridRatchetCount=1+getChoiceIndex("gridRatchet");
     const int direction=getChoiceIndex("gridDirection");
 
     if((hostSync && gridHostStepChanged) || (!hostSync && gridSamplesToNext<=0.0))
@@ -180,11 +189,14 @@ void JerzyMonoAnalogAudioProcessor::processGridSequencerSample(double bpm, int s
         const int col=step&7;
         gridPlayColumn.store(col);
 
-        for(int row=0;row<8;++row)
+        gridStepNote=-1;gridStepActive=false;gridRatchetIndex=0;
+        std::uniform_real_distribution<float> chance(0.0f,1.0f);
+        if(chance(arpRng)<=probability) for(int row=0;row<8;++row)
         {
             if(gridPattern[(size_t)(bank*64+row*8+col)].load()!=0)
             {
-                gridCurrentNote=gridNoteForRow(row);
+                gridStepNote=gridNoteForRow(row);gridStepActive=true;
+                gridCurrentNote=gridStepNote;
                 engine.noteOn(gridCurrentNote,velocity);
                 generatedMidi.addEvent(juce::MidiMessage::noteOn(1,gridCurrentNote,velocity),sampleOffset);
                 break;
@@ -196,11 +208,23 @@ void JerzyMonoAnalogAudioProcessor::processGridSequencerSample(double bpm, int s
         gridSamplesToNext+=currentStepSamples;
     }
 
-    if(gridCurrentNote>=0 && gridSamplesToNext<=gridCurrentStepSamples*(1.0-gate))
+    const double elapsed=juce::jlimit(0.0,gridCurrentStepSamples,gridCurrentStepSamples-gridSamplesToNext);
+    const double substep=gridCurrentStepSamples/(double)juce::jmax(1,gridRatchetCount);
+    if(gridStepActive && gridCurrentStepSamples>0.0)
     {
-        engine.noteOff(gridCurrentNote);
-        generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),sampleOffset);
-        gridCurrentNote=-1;
+        const int due=juce::jlimit(0,gridRatchetCount-1,(int)std::floor(elapsed/substep+1.0e-9));
+        if(due>gridRatchetIndex)
+        {
+            if(gridCurrentNote>=0){engine.noteOff(gridCurrentNote);generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),sampleOffset);}
+            gridRatchetIndex=due;gridCurrentNote=gridStepNote;
+            engine.noteOn(gridCurrentNote,velocity);
+            generatedMidi.addEvent(juce::MidiMessage::noteOn(1,gridCurrentNote,velocity),sampleOffset);
+        }
+        const double within=elapsed-gridRatchetIndex*substep;
+        if(gridCurrentNote>=0 && within>=substep*gate)
+        {
+            engine.noteOff(gridCurrentNote);generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),sampleOffset);gridCurrentNote=-1;
+        }
     }
 
     gridSamplesToNext-=1.0;
@@ -220,6 +244,9 @@ bool JerzyMonoAnalogAudioProcessor::arpRhythmGate(int rhythm, int step) const
         case 1: return (step % 2) == 0;                           // every 2
         case 2: { static constexpr int m[8]={1,0,1,1,0,1,0,1}; return m[step & 7] != 0; } // 3-3-2 feel
         case 3: { static constexpr int m[8]={1,1,0,1,0,1,1,0}; return m[step & 7] != 0; } // syncopated
+        case 4: { static constexpr int m[8]={1,0,0,1,0,0,1,0}; return m[step & 7] != 0; } // clave
+        case 5: { static constexpr int m[8]={1,0,1,0,0,1,0,0}; return m[step & 7] != 0; } // 5 over 8
+        case 6: { static constexpr int m[8]={1,0,1,1,0,1,1,0}; return m[step & 7] != 0; } // rolling
         default:return true;
     }
 }
@@ -244,10 +271,24 @@ int JerzyMonoAnalogAudioProcessor::chooseArpNote(int pattern, int step)
         }
         case 3:
         {
-            std::uniform_int_distribution<int> d(0, n - 1);
-            return notes[d(arpRng)];
+            int index=0;
+            if(n>1){std::uniform_int_distribution<int>d(0,n-2);index=d(arpRng);if(index>=arpLastRandomIndex)++index;}
+            arpLastRandomIndex=index;
+            return notes[index];
         }
         case 4: return notes[step % n]; // as played fallback
+        case 5: return notes[(step / 2) % n]; // double up
+        case 6: return notes[(n - 1 - ((step / 2) % n) + n) % n]; // double down
+        case 7: // inclusive up/down
+        {
+            if(n==1)return notes[0];
+            const int span=n*2;const int p=step%span;
+            return notes[p<n?p:span-1-p];
+        }
+        case 8: // converge from both ends
+        {
+            const int low=(step/2)%( (n+1)/2 );const int high=n-1-low;return notes[(step&1)?high:low];
+        }
         default:return notes[step % n]; // up
     }
 }
@@ -393,6 +434,9 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                         physicalHeldNotes.add(note);
                     gridMidiHeldCount.store(physicalHeldNotes.size());
                     gridMidiRunning.store(true);
+                    gridTriggerNote.store(note);
+                    gridHostPpqOrigin=samplePpq;
+                    lastGridHostStep=-1;
                     if(gridCurrentNote>=0){
                         engine.noteOff(gridCurrentNote);
                         generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),s);
@@ -437,6 +481,18 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                             gridCurrentNote=-1;
                         }
                         gridPlayColumn.store(-1);
+                    }
+                    else
+                    {
+                        gridTriggerNote.store(physicalHeldNotes.getLast());
+                        gridHostPpqOrigin=samplePpq;
+                        lastGridHostStep=-1;
+                        gridGlobalStep=0;gridSamplesToNext=0.0;
+                        if(gridCurrentNote>=0){
+                            engine.noteOff(gridCurrentNote);
+                            generatedMidi.addEvent(juce::MidiMessage::noteOff(1,gridCurrentNote),s);
+                            gridCurrentNote=-1;
+                        }
                     }
                 }
                 else
@@ -556,11 +612,12 @@ void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
         if(st.hasProperty("fxOrder")){auto tokens=juce::StringArray::fromTokens(st["fxOrder"].toString(),",","");std::array<int,MonoFxChain::count> order{0,1,2,3,4,5};if(tokens.size()==MonoFxChain::count){for(int i=0;i<MonoFxChain::count;++i)order[(size_t)i]=tokens[i].getIntValue();fxChain.setOrder(order);}st.removeProperty("fxOrder",nullptr);}
         // An old preset must reset destinations added in 0.4 instead of inheriting
         // whatever the previously loaded preset left in the current processor.
-        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth"})
+        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth", "gridOctave"})
         {
             if(!st.getChildWithProperty("id",id).isValid())
             {
-                const float defaultValue = juce::String(id)=="fxCompThreshold" ? -18.0f
+                const float defaultValue = juce::String(id)=="gridOctave" ? 2.0f
+                                         : juce::String(id)=="fxCompThreshold" ? -18.0f
                                          : juce::String(id)=="fxCompRatio" ? 4.0f
                                          : juce::String(id)=="fxCompAttack" ? 0.01f
                                          : juce::String(id)=="fxCompRelease" ? 0.12f
@@ -630,8 +687,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<B>("legato","Legato",true)); l.add(std::make_unique<B>("retrigger","Retrigger",false));
     l.add(std::make_unique<B>("arpOn","Arpeggiator On",false));
     l.add(std::make_unique<C>("arpDivision","Arp Division",juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},4));
-    l.add(std::make_unique<C>("arpPattern","Arp Pattern",juce::StringArray{"Up","Down","UpDown","Random","As Played"},0));
-    l.add(std::make_unique<C>("arpRhythm","Arp Rhythm",juce::StringArray{"Straight","Every 2","3-3-2","Syncopated"},0));
+    l.add(std::make_unique<C>("arpPattern","Arp Pattern",juce::StringArray{"Up","Down","UpDown","Random","As Played","Up x2","Down x2","UpDown Inclusive","Converge"},0));
+    l.add(std::make_unique<C>("arpRhythm","Arp Rhythm",juce::StringArray{"Straight","Every 2","3-3-2","Syncopated","Clave","5 over 8","Rolling"},0));
     l.add(std::make_unique<C>("arpOctaves","Arp Octaves",juce::StringArray{"1","2","3","4"},0));
     l.add(std::make_unique<P>("arpGate","Arp Gate",0.05f,0.98f,0.72f));
     l.add(std::make_unique<B>("arpLatch","Arp Latch",false));
@@ -683,8 +740,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<C>("fxRotaryDivision","FX Rotary Division",juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"},4));
     l.add(std::make_unique<P>("fxRotaryRate","FX Rotary Rate",0.1f,8.0f,1.0f));
     l.add(std::make_unique<P>("fxRotaryDepth","FX Rotary Depth",0.0f,1.0f,0.6f));
+    l.add(std::make_unique<C>("gridOctave","Grid Octave",juce::StringArray{"-2 oct","-1 oct","0 oct","+1 oct","+2 oct"},2));
+    l.add(std::make_unique<P>("gridProbability","Grid Probability",0.0f,1.0f,1.0f));
+    l.add(std::make_unique<C>("gridRatchet","Grid Ratchet",juce::StringArray{"1","2","3","4"},0));
     return l;
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new JerzyMonoAnalogAudioProcessor(); }
-

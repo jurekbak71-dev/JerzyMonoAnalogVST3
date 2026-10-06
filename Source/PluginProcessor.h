@@ -45,6 +45,7 @@ public:
     void launchPadNoteOff(int padIndex);
     int getGridPlayColumn() const noexcept { return gridPlayColumn.load(); }
     int getGridRootNote() const noexcept { return gridRootNote.load(); }
+    int getGridRowNote(int row) const { return gridNoteForRow(row); }
     void setGridRootNote(int n) noexcept { gridRootNote.store(juce::jlimit(24,84,n)); }
 private:
     int getChoiceIndex(const char* id) const;
@@ -63,6 +64,7 @@ private:
     int arpStep = 0;
     int arpCurrentNote = -1;
     int arpUpDownPos = 0;
+    int arpLastRandomIndex = -1;
     juce::Array<int> arpHeldNotes;
     juce::Array<int> arpLatchedNotes;
     juce::Array<int> physicalHeldNotes;
@@ -72,6 +74,8 @@ private:
     std::atomic<int> gridMode { 0 };
     std::atomic<int> gridBank { 0 };
     std::atomic<int> gridRootNote { 48 };
+    std::atomic<int> gridTriggerNote { 48 };
+    double gridHostPpqOrigin = 0.0;
     std::atomic<int> gridActiveBanks { 8 };
     std::atomic<bool> gridMidiRunning { false };
     std::atomic<int> gridMidiHeldCount { 0 };
@@ -84,5 +88,9 @@ private:
     int lastArpHostStep = -1;
     int lastGridHostStep = -1;
     int gridCurrentNote = -1;
+    int gridRatchetCount = 1;
+    int gridRatchetIndex = 0;
+    int gridStepNote = -1;
+    bool gridStepActive = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)
 };

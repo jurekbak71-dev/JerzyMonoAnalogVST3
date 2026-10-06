@@ -94,6 +94,18 @@ int main()
             double energy=0;
             for(int i=0;i<8000;++i){double x=engine.processSample();energy+=x*x;check(std::isfinite(x),"Engine finite");}
             check(energy>.01,"Engine audible");
+            auto renderDrive=[&](double mixer,double output){
+                jerzy::MonoAnalogEngine v;v.prepare(rate,512);jerzy::MonoParameters q;
+                q.osc1Wave=jerzy::BandLimitedOscillator::Wave::saw;q.osc2Level=.35;q.subLevel=.15;
+                q.analogDriftCents=0;q.cutoffHz=20000;q.filterEnvOct=0;q.ampAttack=.001;q.ampDecay=.001;q.ampSustain=1.0;
+                q.mixerDrive=mixer;q.outputDrive=output;q.master=.5;v.setParameters(q);v.noteOn(48,1.0f);
+                std::vector<double> out;out.reserve(4096);for(int i=0;i<4096;++i)out.push_back(v.processSample());return out;
+            };
+            auto clean=renderDrive(0.0,0.0),mixDriven=renderDrive(.9,0.0),outDriven=renderDrive(0.0,.9);
+            double mixerDelta=0.0,outputDelta=0.0;
+            for(size_t i=0;i<clean.size();++i){mixerDelta+=std::abs(clean[i]-mixDriven[i]);outputDelta+=std::abs(clean[i]-outDriven[i]);}
+            check(mixerDelta>0.1,"Mixer drive must audibly alter the signal");
+            check(outputDelta>0.1,"Output drive must audibly alter the signal");
             for(int mode=0;mode<7;++mode){p.filterMode=static_cast<jerzy::FilterMode>(mode);p.resonance=1.15;p.modEnvPWM=-1.0;engine.setParameters(p);for(int i=0;i<1024;++i)check(std::isfinite(engine.processSample()),"Filter mode switching");}
             p.resonance=0;p.modEnvPWM=0;engine.setParameters(p);engine.noteOff(36);
             for(int i=0;i<static_cast<int>(rate);++i) engine.processSample();

@@ -135,3 +135,15 @@ mid/side stereo width, Juno-style chorus/chorus/flanger, and a stereo rotary
 speaker with optional host-tempo sync. FX order is stored with the plugin state.
 Every FX control is a host-automatable parameter; generated and incoming MIDI is
 left intact. Effects are bypassed by default to preserve existing presets.
+
+
+## 0.7.0 — MIDI-triggered Grid and responsive FX page
+
+- MIDI Trigger mode now starts/restarts the internal Grid from each incoming FL
+  Studio MIDI note. That note becomes the sequence root, so the whole pattern
+  transposes with the played note; overlapping held notes use the most recent
+  remaining note as the root.
+- The Grid page adds an octave selector from -2 to +2 octaves. It is host
+  automatable and restores a neutral octave in older project states.
+- The FX page now lays out its six modules from the live editor bounds, keeping
+  the chain controls and knobs inside their cards when the plugin is resized.
