@@ -8,14 +8,14 @@ Samodzielny monofoniczny syntezator analog-modeling VST3/Standalone oparty na JU
 - nieliniowy mixer
 - 24 dB/oct nonlinear ladder-style VCF z rezonansem, drive, key tracking i bipolar filter envelope
 - dwa analogowo zakrzywione ADSR
-- LFO z synchronizack do tempa
+- LFO z synchronizacją do tempa
 - glide, legato, retrigger i wybór priorytetu nut
 - arpeggiator
 - siatka 8×8 RGB jako sekwencer / launch-pad
-- root note, wybór skali i dBugo[ sekwencji do 8 banków / 64 kroków
+- root note, wybór skali i długość sekwencji do 8 banków / 64 kroków
 - uruchamianie sekwencera przez MIDI
 - parametry automatyzowalne przez host/DAW
-- 4× wewotrzny oversampling i filtracja antyaliasingowa
+- 4× wewnętrzny oversampling i filtracja antyaliasingowa
 
 ## Build Windows / FL Studio
 Wymagane: Visual Studio 2022 z workloadem Desktop development with C++ oraz CMake.
