@@ -71,7 +71,7 @@ void JerzyLookAndFeel::drawToggleButton(juce::Graphics& g,juce::ToggleButton& b,
     g.setColour(b.getToggleState()?col.withAlpha(.28f):C(0xff101214));g.fillRoundedRectangle(r,4.0f);
     g.setColour(b.getToggleState()?col:C(0xff454a4f));g.drawRoundedRectangle(r,4.0f,1.0f);
     g.setColour(lcdBg);
-    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(9.0f,r.getHeight()*.32f),juce::Font::bold)));
+    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(11.0f,r.getHeight()*.38f),juce::Font::bold)));
     g.drawFittedText(b.getButtonText(),b.getLocalBounds().reduced(3),juce::Justification::centred,1,0.75f);
 }
 
@@ -85,11 +85,11 @@ void JerzyLookAndFeel::drawComboBox(juce::Graphics& g,int w,int h,bool,int,int,i
 }
 juce::Font JerzyLookAndFeel::getComboBoxFont(juce::ComboBox& b)
 {
-    return juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(9.0f,b.getHeight()*.34f),juce::Font::bold));
+    return juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(11.0f,b.getHeight()*.38f),juce::Font::bold));
 }
 juce::Font JerzyLookAndFeel::getLabelFont(juce::Label& l)
 {
-    return juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(8.0f,l.getHeight()*.40f),juce::Font::bold));
+    return juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(11.0f,l.getHeight()*.45f),juce::Font::bold));
 }
 void JerzyLookAndFeel::positionComboBoxText(juce::ComboBox& b,juce::Label& l)
 {
@@ -215,14 +215,23 @@ MonoFxPanel::MonoFxPanel(JerzyMonoAnalogAudioProcessor& p):proc(p)
     static const char* labels[17]={"THRESHOLD","RATIO","ATTACK","RELEASE","DRIVE","FEEDBACK","MIX","ROOM","DAMP","MIX","WIDTH","RATE","DEPTH","MIX","FB","FREE RATE","DEPTH"};
     for(int i=0;i<17;++i)
     {
-        auto& s=knobs[(size_t)i];s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,64,18);
+        auto& s=knobs[(size_t)i];s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,64,22);
+        addAndMakeVisible(s);knobAttachments[(size_t)i]=std::make_unique<SliderAttachment>(proc.apvts,ids[i],s);
         s.setNumDecimalPlacesToDisplay(0);
         s.textFromValueFunction=[i](double v){
-            switch(i){case 0:return juce::String(juce::roundToInt(v))+" dB";case 1:return juce::String(juce::roundToInt(v))+":1";case 2:case 3:return v<1.0?juce::String(juce::roundToInt(v*1000.0))+" ms":juce::String(juce::roundToInt(v))+" s";case 4:return juce::String(juce::roundToInt(v*18.0))+" dB";case 11:case 15:return juce::String(juce::roundToInt(v))+" Hz";case 10:return juce::String(juce::roundToInt(v*100.0))+" %";default:return juce::String(juce::roundToInt(v*100.0))+" %";}
+            switch(i){case 0:return juce::String(juce::roundToInt(v))+" dB";case 1:return juce::String(juce::roundToInt(v))+":1";case 2:case 3:return v<1.0?juce::String(juce::roundToInt(v*1000.0))+" ms":juce::String(juce::roundToInt(v))+" s";case 4:return juce::String(juce::roundToInt(v*18.0))+" dB";case 11:case 15:return v<1.0?juce::String(juce::roundToInt(v*1000.0))+" mHz":juce::String(juce::roundToInt(v))+" Hz";default:return juce::String(juce::roundToInt(v*100.0))+" %";}
+        };
+        s.valueFromTextFunction=[i](const juce::String& text){
+            const double v=text.getDoubleValue();
+            if(i==2||i==3)return text.containsIgnoreCase("ms")?v*.001:v;
+            if(i==4)return v/18.0;
+            if(i==11||i==15)return text.containsIgnoreCase("mhz")?v*.001:v;
+            if(i==0||i==1)return v;
+            return v*.01;
         };
         s.setColour(juce::Slider::textBoxTextColourId,C(0xff24231f));s.setColour(juce::Slider::textBoxBackgroundColourId,C(0xffd5cdb8));
         s.setColour(juce::Slider::rotarySliderFillColourId,C(RED));s.setColour(juce::Slider::rotarySliderOutlineColourId,C(0xff34383c));
-        addAndMakeVisible(s);knobAttachments[(size_t)i]=std::make_unique<SliderAttachment>(proc.apvts,ids[i],s);
+        s.updateText();
         knobLabels[(size_t)i].setText(labels[i],juce::dontSendNotification);knobLabels[(size_t)i].setJustificationType(juce::Justification::centred);knobLabels[(size_t)i].setColour(juce::Label::textColourId,lcdBg);addAndMakeVisible(knobLabels[(size_t)i]);
     }
     static const char* toggleIds[6]={"fxCompOn","fxDelayOn","fxReverbOn","fxWidthOn","fxChorusOn","fxRotaryOn"};
@@ -271,7 +280,7 @@ void MonoFxPanel::paint(juce::Graphics& g)
         auto r=juce::Rectangle<float>((float)(8+col*(cardW+8)),(float)(56+row*(cardH+8)),(float)cardW,(float)cardH);
         g.setColour(C(PANEL));g.fillRoundedRectangle(r,5.0f);g.setColour(C(EDGE));g.drawRoundedRectangle(r,5.0f,1.2f);
         auto hd=r.removeFromTop(28.0f).reduced(7.0f,2.0f);g.setColour(lcdBg);g.fillRoundedRectangle(hd,2.0f);g.setColour(lcdText);
-        g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jlimit(8.0f,11.0f,(float)cardW*0.024f),juce::Font::bold)));
+        g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(11.0f,(float)cardW*0.026f),juce::Font::bold)));
         g.drawFittedText(titles[i],hd.toNearestInt().reduced(3,0),juce::Justification::centredLeft,1);
     }
 }
@@ -338,7 +347,7 @@ void JerzyMonoAnalogAudioProcessorEditor::OutputMeter::paint(juce::Graphics& g)
 JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMonoAnalogAudioProcessor& p)
 :AudioProcessorEditor(&p),proc(p),padGrid(p),fxPanel(p)
 {
-    setLookAndFeel(&look);setOpaque(true);setResizable(true,true);setResizeLimits(1000,500,1920,1200);getConstrainer()->setFixedAspectRatio(2.0);setSize(1200,600);
+    setLookAndFeel(&look);setOpaque(true);setResizable(true,true);setResizeLimits(1200,600,1920,960);getConstrainer()->setFixedAspectRatio(2.0);setSize(1320,660);
 
     title.setText("JERZY MONO ANALOG",juce::dontSendNotification);title.setColour(juce::Label::textColourId,lcdText);title.setColour(juce::Label::backgroundColourId,lcdBg);title.setJustificationType(juce::Justification::centredLeft);
     subtitle.setText("ANALOG MODELING SYNTH",juce::dontSendNotification);subtitle.setColour(juce::Label::textColourId,lcdText);subtitle.setColour(juce::Label::backgroundColourId,lcdBg);subtitle.setJustificationType(juce::Justification::centred);
@@ -355,12 +364,9 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupCombo(gridRoot,{"C1","C#1","D1","D#1","E1","F1","F#1","G1","G#1","A1","A#1","B1","C2","C#2","D2","D#2","E2","F2","F#2","G2","G#2","A2","A#2","B2","C3","C#3","D3","D#3","E3","F3","F#3","G3","G#3","A3","A#3","B3","C4","C#4","D4","D#4","E4","F4","F#4","G4","G#4","A4","A#4","B4","C5","C#5","D5","D#5","E5","F5","F#5","G5","G#5","A5","A#5","B5","C6"});
     setupCombo(gridScale,{"CHROMATIC","MAJOR","NAT MINOR","DORIAN","PHRYGIAN","MIXOLYDIAN","MAJOR PENT","MINOR PENT"});
     setupCombo(gridBanks,{"1 BANK / 8 STEPS","2 BANKS / 16 STEPS","3 BANKS / 24 STEPS","4 BANKS / 32 STEPS","5 BANKS / 40 STEPS","6 BANKS / 48 STEPS","7 BANKS / 56 STEPS","8 BANKS / 64 STEPS"});
-    setupKnob(gridGate,"GATE","%",0.75);
     setupCombo(gridDirection,{"FORWARD","REVERSE","PING-PONG","RANDOM"});
     setupCombo(gridOctave,{"-2 OCT","-1 OCT","0 OCT","+1 OCT","+2 OCT"});
-    setupKnob(gridSwing,"SWING","%",0.0);setupKnob(gridVelocity,"VELOCITY","%",0.95);
-    setupKnob(gridProbability,"PROBABILITY","%",1.0);setupCombo(gridRatchet,{"1","2","3","4"});
-    setupKnob(arpSwing,"SWING","%",0.0);setupKnob(arpVelocity,"VELOCITY","%",0.9);
+    setupCombo(gridRatchet,{"1","2","3","4"});
     gridModeButton.setButtonText("MODE: SEQ");
     gridModeButton.onClick=[this]
     {
@@ -413,6 +419,10 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     filterModeA=std::make_unique<ComboAttachment>(s,"filterMode",filterMode);
     modEnvPitchA=std::make_unique<SliderAttachment>(s,"modEnvPitch",modEnvPitch);
     modEnvPWMA=std::make_unique<SliderAttachment>(s,"modEnvPWM",modEnvPWM);
+    modEnvOsc2PitchA=std::make_unique<SliderAttachment>(s,"modEnvOsc2Pitch",modEnvOsc2Pitch);
+    modEnvResonanceA=std::make_unique<SliderAttachment>(s,"modEnvResonance",modEnvResonance);
+    modEnvMixDriveA=std::make_unique<SliderAttachment>(s,"modEnvMixDrive",modEnvMixDrive);
+    modEnvAmpA=std::make_unique<SliderAttachment>(s,"modEnvAmp",modEnvAmp);
     osc1WaveA=std::make_unique<ComboAttachment>(s,"osc1Wave",osc1Wave);osc1OctA=std::make_unique<ComboAttachment>(s,"osc1Oct",osc1Oct);
     osc2WaveA=std::make_unique<ComboAttachment>(s,"osc2Wave",osc2Wave);osc2OctA=std::make_unique<ComboAttachment>(s,"osc2Oct",osc2Oct);
     subWaveA=std::make_unique<ComboAttachment>(s,"subWave",subWave);lfoWaveA=std::make_unique<ComboAttachment>(s,"lfoWave",lfoWave);
@@ -445,6 +455,10 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     gridRatchetA=std::make_unique<ComboAttachment>(s,"gridRatchet",gridRatchet);
     arpSwingA=std::make_unique<SliderAttachment>(s,"arpSwing",arpSwing);
     arpVelocityA=std::make_unique<SliderAttachment>(s,"arpVelocity",arpVelocity);
+    setupKnob(gridGate,"GATE","%",0.75);
+    setupKnob(gridSwing,"SWING","%",0.0);setupKnob(gridVelocity,"VELOCITY","%",0.95);
+    setupKnob(gridProbability,"PROBABILITY","%",1.0);
+    setupKnob(arpSwing,"SWING","%",0.0);setupKnob(arpVelocity,"VELOCITY","%",0.9);
 
     setupKnob(osc1Level,"LEVEL","%",0.0);setupKnob(pulseWidth,"PULSE WIDTH","%",0.5);
     setupKnob(osc2Level,"LEVEL","%",0.0);setupKnob(detune,"DETUNE","ct",0.0);
@@ -456,12 +470,21 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupKnob(lfoRate,"RATE","Hz",0.03);setupKnob(lfoPitch,"PITCH","ct",0.0);setupKnob(lfoFilter,"FILTER","oct",0.0);setupKnob(lfoPWM,"PWM","%",0.0);setupKnob(lfoAmp,"AMP","%",0.0);setupKnob(lfoFade,"FADE IN","s",0.0);
     setupKnob(glide,"GLIDE","s",0.0);setupKnob(outDrive,"OUTPUT DRIVE","dB",0.0);setupKnob(master,"MASTER","%",0.8);
     setupKnob(modEnvPitch,"MOD ENV PITCH","st",0.0);setupKnob(modEnvPWM,"MOD ENV PWM","",0.0);
+    setupKnob(modEnvOsc2Pitch,"ENV OSC2 PITCH","st",0.0);
+    setupKnob(modEnvResonance,"ENV RESONANCE","%",0.0);
+    setupKnob(modEnvMixDrive,"ENV MIX DRIVE","%",0.0);
+    setupKnob(modEnvAmp,"ENV AMP","%",0.0);
     setupKnob(arpGate,"GATE","%",0.72);
 
     modEnvPitch.setSliderStyle(juce::Slider::LinearHorizontal);modEnvPitch.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,22);
     modEnvPWM.setSliderStyle(juce::Slider::LinearHorizontal);modEnvPWM.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,22);
     modEnvPWM.textFromValueFunction=[](double v){return juce::String(v*100.0,0)+" %";};
     modEnvPWM.valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()*0.01;};modEnvPWM.updateText();
+    for(auto* slider : {&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp})
+    {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,72,26);
+    }
     setMainPage(0);
     startTimerHz(20);
 }
@@ -471,21 +494,22 @@ JerzyMonoAnalogAudioProcessorEditor::~JerzyMonoAnalogAudioProcessorEditor(){stop
 void JerzyMonoAnalogAudioProcessorEditor::setupKnob(ResetSlider& k,const juce::String& name,const juce::String& unit,double neutral)
 {
     k.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,88,21);
+    k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,76,24);
     k.setNumDecimalPlacesToDisplay(0);
     k.textFromValueFunction=[unit,name](double v){
         if(unit=="%")v*=100.0;
         else if(unit=="dB")v*=name=="FILTER DRIVE"?20.0:18.0;
+        else if(unit=="Hz"&&v<1.0)return juce::String(juce::roundToInt(v*1000.0))+" mHz";
         else if(unit=="s"&&v<1.0)return juce::String(juce::roundToInt(v*1000.0))+" ms";
         return juce::String(juce::roundToInt(v))+(unit.isEmpty()?"":" "+unit);
     };
-    k.valueFromTextFunction=[unit,name](const juce::String& text){double v=text.getDoubleValue();if(unit=="%")return v*0.01;if(unit=="dB")return v/(name=="FILTER DRIVE"?20.0:18.0);if(unit=="s"&&text.containsIgnoreCase("ms"))return v*.001;return v;};
+    k.valueFromTextFunction=[unit,name](const juce::String& text){double v=text.getDoubleValue();if(unit=="%")return v*0.01;if(unit=="dB")return v/(name=="FILTER DRIVE"?20.0:18.0);if(unit=="Hz"&&text.containsIgnoreCase("mHz"))return v*.001;if(unit=="s"&&text.containsIgnoreCase("ms"))return v*.001;return v;};
     k.setNeutralValue(neutral);k.setTooltip(name);k.updateText();addAndMakeVisible(k);
 }
 void JerzyMonoAnalogAudioProcessorEditor::setupEnvSlider(ResetSlider& k,const juce::String& name,const juce::String& unit,double neutral)
 {
     k.setSliderStyle(juce::Slider::LinearVertical);
-    k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,54,22);
+    k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,70,24);
     k.setNumDecimalPlacesToDisplay(0);
     k.textFromValueFunction=[unit](double v){
         if(unit == "s") return v < 1.0 ? juce::String(juce::roundToInt(v * 1000.0)) + " ms" : juce::String(juce::roundToInt(v)) + " s";
@@ -508,14 +532,14 @@ void JerzyMonoAnalogAudioProcessorEditor::drawSection(juce::Graphics& g,const Se
     const float sc=scale();auto r=juce::Rectangle<float>(sec.bounds.getX()*sc,sec.bounds.getY()*sc,sec.bounds.getWidth()*sc,sec.bounds.getHeight()*sc);
     g.setColour(C(PANEL));g.fillRoundedRectangle(r,5*sc);g.setColour(C(EDGE));g.drawRoundedRectangle(r,5*sc,juce::jmax(1.0f,1.2f*sc));
     auto hdr=r.removeFromTop(29*sc).reduced(5*sc,3*sc);g.setColour(lcdBg);g.fillRoundedRectangle(hdr,2*sc);g.setColour(lcdText);
-    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(8.0f,12.0f*sc),juce::Font::bold)));
+    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(12.0f,12.0f*sc),juce::Font::bold)));
     g.drawFittedText(sec.title,hdr.toNearestInt().reduced((int)(25*sc),0),juce::Justification::centredLeft,1,.75f);drawLed(g,{hdr.getX()+12*sc,hdr.getCentreY()},3.5f*sc,sec.led);
 }
 void JerzyMonoAnalogAudioProcessorEditor::drawLabelBox(juce::Graphics& g,const juce::String&t,float x,float y,float w) const
 {
     const float sc=scale();auto r=juce::Rectangle<float>(x*sc,y*sc,w*sc,16*sc);g.setColour(lcdBg);g.fillRoundedRectangle(r,2*sc);g.setColour(lcdText);
-    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(7.0f,9.0f*sc),juce::Font::bold)));
-    g.drawFittedText(t,r.toNearestInt().reduced(2,0),juce::Justification::centred,1,.72f);
+    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),juce::jmax(10.5f,11.0f*sc),juce::Font::bold)));
+    g.drawFittedText(t,r.toNearestInt().reduced(2,0),juce::Justification::centred,1,.85f);
 }
 void JerzyMonoAnalogAudioProcessorEditor::drawEnvelope(juce::Graphics&g,juce::Rectangle<float>r,bool filt) const
 {
@@ -543,36 +567,30 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
     for(const auto&s:sections)drawSection(g,s);
     auto label=[&](const char*t,float x,float y,float w){drawLabelBox(g,t,x,y,w);};
     if(modulePage==0){
-        label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,145,110);label("PULSE WIDTH",175,145,130);
-        label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,145,110);label("DETUNE",475,145,130);
-        label("SUB / NOISE",610,112,190);label("MIX BUS DRIVE",850,112,220);label("ANALOG DRIFT",1085,112,180);label("SUB LEVEL",625,145,90);label("NOISE",725,145,90);
+        label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,169,110);label("PULSE WIDTH",175,169,130);
+        label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,110);label("DETUNE",475,169,130);
+        label("WAVE",615,112,185);label("SUB LEVEL",625,169,90);label("NOISE",725,169,90);
+        label("MIX DRIVE",860,169,115);label("DRIFT",1000,169,115);
+        label("OUT DRIVE",1175,169,115);label("MASTER",1300,169,115);
         label("GLIDE",40,416,110);label("MODE",190,416,130);label("NOTE PRIORITY",350,416,150);label("LEGATO",520,416,120);label("RETRIGGER",660,416,130);
-        label("OUTPUT DRIVE",875,416,210);label("MASTER LEVEL",1110,416,230);
+        label("OUTPUT LEVEL METER",900,465,450);
     }else if(modulePage==1){
-        label("FILTER MODEL",35,112,260);label("CUTOFF",35,158,110);label("RESONANCE",155,158,110);label("FILTER DRIVE",275,158,110);label("ENV DEPTH",395,158,110);label("KEY TRACK",515,158,110);
-        label("ENV → PITCH",760,130,250);label("ENV → PWM",1070,130,250);
+        label("FILTER MODEL",35,112,260);label("CUTOFF",35,171,110);label("RESONANCE",155,171,110);label("FILTER DRIVE",275,171,110);label("ENV DEPTH",395,171,110);label("KEY TRACK",515,171,110);
+        label("PITCH",760,130,200);label("PWM",975,130,200);label("OSC 2 PITCH",1190,130,200);
+        label("RESONANCE",760,220,200);label("MIX DRIVE",975,220,200);label("AMP",1190,220,200);
         label("AMP ENVELOPE  •  ATTACK / DECAY / SUSTAIN / RELEASE",30,365,650);label("FILTER ENVELOPE  •  ATTACK / DECAY / SUSTAIN / RELEASE",740,365,660);
         label("A",35,420,80);label("D",190,420,80);label("S",345,420,80);label("R",500,420,80);
         label("A",755,420,80);label("D",910,420,80);label("S",1065,420,80);label("R",1220,420,80);
     }else if(modulePage==2){
         label("LFO WAVE",35,115,190);label("CLOCK DIVISION",245,115,200);label("TEMPO SYNC",465,115,170);
-        label("RATE",45,170,170);label("PITCH",260,170,170);label("FILTER",475,170,170);label("PWM",690,170,170);label("AMP",905,170,170);label("FADE IN",1120,170,170);
-        label("ENVELOPE ROUTING",35,395,280);label("PITCH",50,440,110);label("PWM",350,440,110);
-        label("MODULATION DEPTHS ARE BIPOLAR WHERE SHOWN  •  AUTOMATABLE FROM FL STUDIO",650,470,700);
+        label("RATE",45,176,170);label("PITCH",260,176,170);label("FILTER",475,176,170);label("PWM",690,176,170);label("AMP",905,176,170);label("FADE IN",1120,176,170);
+        label("PITCH",75,430,300);label("PWM",525,430,300);label("OSC 2 PITCH",975,430,300);
+        label("RESONANCE",75,540,300);label("MIX DRIVE",525,540,300);label("AMP",975,540,300);
     }else if(modulePage==3){
-        label("MODE",30,108,135);label("BANK",175,108,110);label("PATTERN LENGTH",295,108,190);label("CLOCK DIVISION",495,108,180);label("SCALE",685,108,190);label("ROOT NOTE",885,108,150);label("DIRECTION",1045,108,175);label("OCTAVE",1230,108,165);
-        label("GATE",35,173,100);label("PLAY",155,173,130);label("MIDI TRIGGER",300,173,145);label("HOST SYNC",460,173,140);label("CLEAR",615,173,120);label("VELOCITY",750,173,110);label("SWING",875,173,110);label("GLOBAL PROB.",1000,173,145);label("GLOBAL RATC.",1160,173,130);
-        auto r=juce::Rectangle<float>(545*sc,250*sc,870*sc,425*sc);g.setColour(C(0xff242624));g.fillRoundedRectangle(r,7*sc);g.setColour(C(0xff9b845b));g.drawRoundedRectangle(r,7*sc,1.2f*sc);
-        g.setColour(C(0xffe9dcbf));g.setFont(juce::Font(juce::FontOptions("Arial",17*sc,juce::Font::bold)));g.drawText("GRID PERFORMANCE",r.toNearestInt().reduced(22*sc,16*sc).withHeight(30*sc),juce::Justification::centredLeft);
-        g.setColour(C(0xffe2b45a));g.setFont(juce::Font(juce::FontOptions("Arial",13*sc,juce::Font::bold)));
-        g.drawText("64 STEP CELLS  •  UP TO 8 PATTERN BANKS",565*sc,320*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.drawText("DIRECTION: FORWARD / REVERSE / PING-PONG / RANDOM",565*sc,366*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.drawText("MIDI TRIGGER TRANSPOSES THE PATTERN TO THE INCOMING NOTE",565*sc,412*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.drawText("HOST SYNC LOCKS STEPS TO FL STUDIO TEMPO AND TRANSPORT",565*sc,458*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.drawText("PROBABILITY ADDS VARIATION; RATCHET CREATES REPEATS",565*sc,504*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.drawText("OCTAVE RANGE: −2 TO +2 OCTAVES  •  SCALE QUANTIZATION",565*sc,550*sc,810*sc,26*sc,juce::Justification::centredLeft);
-        g.setColour(C(0xffaeb69a));g.setFont(juce::Font(juce::FontOptions("Arial",12*sc,juce::Font::plain)));
-        g.drawText("The first active row in a column plays. Notes are sent to host MIDI output.",565*sc,604*sc,810*sc,40*sc,juce::Justification::centredLeft);
+        label("MODE",30,112,135);label("BANK",175,112,110);label("PATTERN LENGTH",295,112,190);label("CLOCK DIVISION",495,112,180);label("SCALE",685,112,190);label("ROOT NOTE",885,112,150);label("DIRECTION",1045,112,175);label("OCTAVE",1230,112,165);
+        label("PLAY",155,174,130);label("MIDI TRIGGER",300,174,145);label("HOST SYNC",460,174,140);label("CLEAR",615,174,120);
+        label("VELOCITY",865,285,145);label("SWING",1030,285,145);label("PROBABILITY",1190,285,175);
+        label("GATE",865,485,145);label("RATCHET",1070,485,200);
     }else if(modulePage==4){
         label("RUN",35,115,130);label("HOST SYNC",180,115,150);label("LATCH",345,115,130);label("RETRIGGER",490,115,145);
         label("RATE",40,205,180);label("NOTE ORDER",245,205,210);label("RHYTHMIC PATTERN",480,205,220);label("OCTAVE RANGE",725,205,190);
@@ -588,34 +606,37 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
 {
     const float sc=scale();
     title.setFont(juce::Font(juce::FontOptions("Arial",20*sc,juce::Font::bold)));
-    subtitle.setFont(juce::Font(juce::FontOptions("Arial",10*sc,juce::Font::bold)));
-    preset.setFont(juce::Font(juce::FontOptions("Arial",10*sc,juce::Font::bold)));
+    subtitle.setFont(juce::Font(juce::FontOptions("Arial",juce::jmax(11.0f,10*sc),juce::Font::bold)));
+    preset.setFont(juce::Font(juce::FontOptions("Arial",juce::jmax(11.0f,10*sc),juce::Font::bold)));
     place(title,18,8,275,44);place(subtitle,22,42,280,18);place(preset,1210,19,205,28);
     for(int i=0;i<6;++i)place(pageButtons[(size_t)i],320+i*145,15,136,38);
     if(fxPage){place(fxPanel,15,80,1410,615);return;}
     if(modulePage==0){
-        place(osc1Wave,30,124,130,30);place(osc1Oct,175,124,130,30);place(osc1Level,35,160,120,126);place(pulseWidth,180,160,120,126);
-        place(osc2Wave,330,124,130,30);place(osc2Oct,475,124,130,30);place(osc2Level,335,160,120,126);place(detune,480,160,120,126);
-        place(subWave,615,124,185,30);place(subLevel,625,160,90,126);place(noiseLevel,725,160,90,126);
-        place(mixDrive,860,160,115,126);place(drift,1000,160,115,126);
-        place(outDrive,1175,160,115,126);place(master,1300,160,115,126);
+        place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,35,190,120,126);place(pulseWidth,180,190,120,126);
+        place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,335,190,120,126);place(detune,480,190,120,126);
+        place(subWave,615,130,185,32);place(subLevel,625,190,90,126);place(noiseLevel,725,190,90,126);
+        place(mixDrive,860,190,115,126);place(drift,1000,190,115,126);
+        place(outDrive,1175,190,115,126);place(master,1300,190,115,126);
         place(glide,35,465,110,130);place(glideMode,185,470,135,35);place(priority,345,470,150,35);place(legato,525,470,125,35);place(retrigger,675,470,135,35);place(outputMeter,900,490,450,36);
     }else if(modulePage==1){
-        place(filterMode,35,124,400,32);place(cutoff,35,176,115,120);place(resonance,165,176,115,120);place(filterDrive,295,176,115,120);place(filterEnv,425,176,115,120);place(keyTrack,555,176,115,120);
-        place(modEnvPitch,760,145,260,34);place(modEnvPWM,1070,145,260,34);
+        place(filterMode,35,132,400,32);place(cutoff,35,194,115,112);place(resonance,165,194,115,112);place(filterDrive,295,194,115,112);place(filterEnv,425,194,115,112);place(keyTrack,555,194,115,112);
+        place(modEnvPitch,760,153,200,36);place(modEnvPWM,975,153,200,36);place(modEnvOsc2Pitch,1190,153,200,36);
+        place(modEnvResonance,760,243,200,36);place(modEnvMixDrive,975,243,200,36);place(modEnvAmp,1190,243,200,36);
         place(aA,35,450,100,155);place(aD,190,450,100,155);place(aS,345,450,100,155);place(aR,500,450,100,155);
         place(fA,755,450,100,155);place(fD,910,450,100,155);place(fS,1065,450,100,155);place(fR,1220,450,100,155);
     }else if(modulePage==2){
-        place(lfoWave,35,130,190,35);place(lfoDivision,245,130,200,35);place(lfoSync,465,130,170,35);
-        place(lfoRate,35,190,175,125);place(lfoPitch,255,190,175,125);place(lfoFilter,475,190,175,125);place(lfoPWM,695,190,175,125);place(lfoAmp,915,190,175,125);place(lfoFade,1135,190,175,125);
-        place(modEnvPitch,75,460,240,42);place(modEnvPWM,390,460,240,42);
+        place(lfoWave,35,137,190,35);place(lfoDivision,245,137,200,35);place(lfoSync,465,137,170,35);
+        place(lfoRate,35,199,175,125);place(lfoPitch,255,199,175,125);place(lfoFilter,475,199,175,125);place(lfoPWM,695,199,175,125);place(lfoAmp,915,199,175,125);place(lfoFade,1135,199,175,125);
+        place(modEnvPitch,75,455,300,42);place(modEnvPWM,525,455,300,42);place(modEnvOsc2Pitch,975,455,300,42);
+        place(modEnvResonance,75,565,300,42);place(modEnvMixDrive,525,565,300,42);place(modEnvAmp,975,565,300,42);
     }else if(modulePage==3){
-        place(gridModeButton,30,124,135,32);place(gridBankBox,175,124,110,32);place(gridBanks,295,124,190,32);place(gridDivision,495,124,180,32);place(gridScale,685,124,190,32);place(gridRoot,885,124,150,32);place(gridDirection,1045,124,175,32);place(gridOctave,1230,124,165,32);
-        place(gridGate,35,184,100,48);place(gridSeqOn,155,188,130,30);place(gridMidiTrigger,300,188,145,30);place(gridHostSync,460,188,140,30);place(gridClearButton,615,188,120,30);
-        place(gridVelocity,750,175,110,70);place(gridSwing,875,175,110,70);place(gridProbability,1000,175,145,70);place(gridRatchet,1160,188,110,30);
-        place(padGrid,30,250,500,430);
+        place(gridModeButton,30,132,135,32);place(gridBankBox,175,132,110,32);place(gridBanks,295,132,190,32);place(gridDivision,495,132,180,32);place(gridScale,685,132,190,32);place(gridRoot,885,132,150,32);place(gridDirection,1045,132,175,32);place(gridOctave,1230,132,165,32);
+        place(gridSeqOn,155,196,130,30);place(gridMidiTrigger,300,196,145,30);place(gridHostSync,460,196,140,30);place(gridClearButton,615,196,120,30);
+        place(padGrid,30,275,795,395);
+        place(gridVelocity,870,310,135,155);place(gridSwing,1035,310,135,155);place(gridProbability,1200,310,135,155);
+        place(gridGate,870,510,135,145);place(gridRatchet,1070,530,220,36);
     }else if(modulePage==4){
-        place(arpOn,35,130,130,36);place(arpHostSync,180,130,150,36);place(arpLatch,345,130,130,36);place(arpRetrigger,490,130,145,36);
+        place(arpOn,35,140,130,36);place(arpHostSync,180,140,150,36);place(arpLatch,345,140,130,36);place(arpRetrigger,490,140,145,36);
         place(arpDivision,35,225,180,38);place(arpPattern,245,225,210,38);place(arpRhythm,480,225,220,38);place(arpOctaves,725,225,190,38);
         place(arpGate,930,225,140,125);place(arpVelocity,1085,225,140,125);place(arpSwing,1240,225,140,125);
     }
@@ -628,12 +649,12 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
     if(modulePage==0){addSection("OSCILLATOR 1",green,15,78,300,290);addSection("OSCILLATOR 2",amber,325,78,300,290);addSection("SUB / NOISE",steel,635,78,205,290);addSection("MIXER / ANALOG",amber,850,78,275,290);addSection("OUTPUT STAGE",green,1135,78,290,290);addSection("PLAY MODE / LEVEL",amber,15,380,1410,295);}
     if(modulePage==1){addSection("FILTER / DRIVE",green,15,78,710,245);addSection("ENVELOPE MODULATION",amber,745,78,680,245);addSection("AMPLIFIER ENVELOPE",green,15,335,690,340);addSection("FILTER ENVELOPE",amber,725,335,700,340);}
     if(modulePage==2){addSection("LOW FREQUENCY OSCILLATOR",green,15,78,1410,285);addSection("MODULATION ROUTING",amber,15,380,1410,295);}
-    if(modulePage==3){addSection("PERFORMANCE GRID / SEQUENCER",green,15,78,1410,150);}
+    if(modulePage==3){addSection("SEQUENCER / TRANSPORT",green,15,78,1410,150);addSection("STEP MATRIX",green,15,238,825,450);addSection("GROOVE / VARIATION",amber,850,238,575,450);}
     if(modulePage==4){addSection("CLOCKED ARPEGGIATOR",green,15,78,1410,600);}
     for(int i=0;i<6;++i){auto& b=pageButtons[(size_t)i];b.setColour(juce::TextButton::buttonColourId,i==modulePage?C(0xff9b7134):C(0xff292b29));b.setColour(juce::TextButton::textColourOffId,C(0xfff0e6d0));b.setColour(juce::TextButton::textColourOnId,C(0xffffffff));}
     std::initializer_list<juce::Component*> all={
         &osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&filterMode,&lfoWave,&lfoDivision,&glideMode,&priority,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&gridDivision,&gridRoot,&gridScale,&gridBanks,&gridDirection,&gridOctave,&gridRatchet,
-        &osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,
+        &osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,
         &aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&glide,&outDrive,&master,&arpGate,&arpSwing,&arpVelocity,&gridGate,&gridSwing,&gridVelocity,&gridProbability,
         &legato,&retrigger,&lfoSync,&arpOn,&arpLatch,&arpRetrigger,&arpHostSync,&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridModeButton,&gridClearButton,&gridBankBox,&padGrid,&outputMeter
     };
@@ -641,8 +662,8 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
     fxPanel.setVisible(fxPage);
     auto show=[&](std::initializer_list<juce::Component*> list){for(auto* c:list)c->setVisible(true);};
     if(modulePage==0)show({&osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&glide,&glideMode,&priority,&legato,&retrigger,&outDrive,&master,&outputMeter});
-    if(modulePage==1)show({&filterMode,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR});
-    if(modulePage==2)show({&lfoWave,&lfoDivision,&lfoSync,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&modEnvPitch,&modEnvPWM});
+    if(modulePage==1)show({&filterMode,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,&aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR});
+    if(modulePage==2)show({&lfoWave,&lfoDivision,&lfoSync,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp});
     if(modulePage==3)show({&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridModeButton,&gridClearButton,&gridBankBox,&gridBanks,&gridDivision,&gridScale,&gridRoot,&gridDirection,&gridOctave,&gridRatchet,&gridGate,&gridSwing,&gridVelocity,&gridProbability,&padGrid});
     if(modulePage==4)show({&arpOn,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&arpGate,&arpVelocity,&arpSwing,&arpHostSync,&arpLatch,&arpRetrigger});
     if(modulePage==0){for(auto* c:{(juce::Component*)&glideMode,(juce::Component*)&priority})c->setVisible(true);}
@@ -658,7 +679,7 @@ void JerzyMonoAnalogAudioProcessorEditor::updateGridControls()
     gridDivision.setEnabled(!launch);
     gridBanks.setEnabled(!launch);
     gridDirection.setEnabled(!launch);
-    gridSwing.setEnabled(!launch && !gridHostSync.getToggleState());gridVelocity.setEnabled(!launch);
+    gridSwing.setEnabled(!launch);gridVelocity.setEnabled(!launch);
     gridProbability.setEnabled(!launch);gridRatchet.setEnabled(!launch);
     gridScale.setEnabled(!launch);
     gridRoot.setEnabled(true);
@@ -673,8 +694,8 @@ void JerzyMonoAnalogAudioProcessorEditor::timerCallback()
     outputMeter.setLevel(proc.getOutputMeter());
     if(!padsPage) repaint();
     const bool sync=lfoSync.getToggleState();lfoRate.setEnabled(!sync);lfoDivision.setEnabled(sync);
-    arpSwing.setEnabled(!arpHostSync.getToggleState());
-    gridSwing.setEnabled(proc.getGridMode()!=JerzyMonoAnalogAudioProcessor::GridMode::launch && !gridHostSync.getToggleState());
+    arpSwing.setEnabled(true);
+    gridSwing.setEnabled(proc.getGridMode()!=JerzyMonoAnalogAudioProcessor::GridMode::launch);
     if(padsPage)
     {
         int activeBanks=8;

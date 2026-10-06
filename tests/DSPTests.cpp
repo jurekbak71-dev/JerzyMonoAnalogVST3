@@ -1,4 +1,5 @@
 #include "AnalogDSP.h"
+#include "SequencerClock.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -106,6 +107,27 @@ int main()
             for(size_t i=0;i<clean.size();++i){mixerDelta+=std::abs(clean[i]-mixDriven[i]);outputDelta+=std::abs(clean[i]-outDriven[i]);}
             check(mixerDelta>0.1,"Mixer drive must audibly alter the signal");
             check(outputDelta>0.1,"Output drive must audibly alter the signal");
+            auto renderMod=[&](int route){
+                jerzy::MonoAnalogEngine v;v.prepare(rate,512);jerzy::MonoParameters q;
+                q.osc1Level=.35;q.osc2Level=.75;q.subLevel=0;q.analogDriftCents=0;
+                q.cutoffHz=3000;q.resonance=.2;q.filterEnvOct=0;q.mixerDrive=.2;
+                q.filterAttack=.0005;q.filterDecay=.01;q.filterSustain=1;
+                q.ampAttack=.0005;q.ampDecay=.01;q.ampSustain=1;
+                if(route==0)q.modEnvOsc2Pitch=12;
+                if(route==1)q.modEnvResonance=.65;
+                if(route==2)q.modEnvMixDrive=.75;
+                if(route==3)q.modEnvAmp=.8;
+                v.setParameters(q);v.noteOn(48,1);
+                std::vector<double> out;out.reserve(8192);
+                for(int i=0;i<8192;++i){const double x=v.processSample();check(std::isfinite(x),"Modulation remains finite");out.push_back(x);}
+                return out;
+            };
+            const auto unmodulated=renderMod(-1);
+            for(int route=0;route<4;++route){
+                const auto modulated=renderMod(route);double difference=0;
+                for(size_t i=0;i<unmodulated.size();++i)difference+=std::abs(unmodulated[i]-modulated[i]);
+                check(difference>.1,"Envelope route must change sound");
+            }
             for(int mode=0;mode<7;++mode){p.filterMode=static_cast<jerzy::FilterMode>(mode);p.resonance=1.15;p.modEnvPWM=-1.0;engine.setParameters(p);for(int i=0;i<1024;++i)check(std::isfinite(engine.processSample()),"Filter mode switching");}
             p.resonance=0;p.modEnvPWM=0;engine.setParameters(p);engine.noteOff(36);
             for(int i=0;i<static_cast<int>(rate);++i) engine.processSample();
@@ -113,6 +135,12 @@ int main()
         }
         double last=-2;
         for(int i=-1000;i<=1000;++i) {const double y=jerzy::saturateAsymmetric(i*.02);check(y>=last,"Saturation monotonic");last=y;}
+        check(jerzy::swungStepAtPpq(0.0,.25,.25)==0,"Swing starts on step zero");
+        check(jerzy::swungStepAtPpq(.25,.25,.25)==0,"Swing delays odd step");
+        check(jerzy::swungStepAtPpq(.3125,.25,.25)==1,"Swing triggers odd step at delayed boundary");
+        check(jerzy::swungStepAtPpq(.5,.25,.25)==2,"Swing preserves paired step duration");
+        check(jerzy::swungStepAtPpq(.75,.25,.25)==2,"Swing delays subsequent odd step");
+        check(jerzy::swungStepAtPpq(.75,.25,0.0)==3,"Zero swing follows straight PPQ");
         std::cout << "PASS: ADSR timing/retrigger, VCO DC/amplitude, ladder stability, engine tail, saturation\n";
         return 0;
     } catch(const std::exception& e) {std::cerr << e.what() << '\n';return 1;}

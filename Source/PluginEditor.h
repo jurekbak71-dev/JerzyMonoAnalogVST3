@@ -136,6 +136,7 @@ private:
 
     ResetSlider osc1Level,pulseWidth,osc2Level,detune,subLevel,noiseLevel,mixDrive,drift;
     ResetSlider cutoff,resonance,filterDrive,filterEnv,keyTrack,modEnvPitch,modEnvPWM;
+    ResetSlider modEnvOsc2Pitch,modEnvResonance,modEnvMixDrive,modEnvAmp;
     ResetSlider aA,aD,aS,aR,fA,fD,fS,fR;
     ResetSlider lfoRate,lfoPitch,lfoFilter,lfoPWM,lfoAmp,lfoFade;
     ResetSlider glide,outDrive,master;
@@ -151,6 +152,7 @@ private:
     std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
     std::unique_ptr<ComboAttachment> filterModeA;
     std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
+    std::unique_ptr<SliderAttachment> modEnvOsc2PitchA,modEnvResonanceA,modEnvMixDriveA,modEnvAmpA;
     std::unique_ptr<SliderAttachment> cutoffA,resonanceA,filterDriveA,filterEnvA,keyTrackA;
     std::unique_ptr<SliderAttachment> aAA,aDA,aSA,aRA,fAA,fDA,fSA,fRA;
     std::unique_ptr<SliderAttachment> lfoRateA,lfoPitchA,lfoFilterA,lfoPWMA,lfoAmpA,lfoFadeA;
