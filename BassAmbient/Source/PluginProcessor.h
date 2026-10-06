@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "Core.h"
+#include "Capture.h"
 
 struct ParameterSpec {
     juce::String id,label; int group=0; int kind=0;
@@ -35,9 +36,31 @@ public:
     std::atomic<int> rootDisplay{-1};
     std::atomic<float> peak{0};
     void applyPreset(int preset);
+    std::atomic<bool> auditionBass{false},auditionPad{false};
+    std::atomic<bool> hostRunning{false};
+    std::atomic<int> requestedScene{-1},activeScene{-1};
+    void panicNow() {auditionBass=false;auditionPad=false;resetRequested=true;}
+    void generate(bool mutation);
+    void undoGeneration();
+    void saveScene(int index);
+    void requestScene(int index) {requestedScene.store(index);}
+    bool hasScene(int index) const;
+    bool exportCapture(const juce::File&,bool midi,juce::String& error);
+    void synchroniseLocks();
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     std::vector<std::atomic<float>*> values;
+    std::vector<juce::RangedAudioParameter*> hostParameters;
+    std::array<std::vector<float>,4> sceneData;
+    std::array<std::atomic<bool>,4> sceneReady{};
+    juce::MemoryBlock undoState;
+    std::array<bool,3> lastLocks{};
+    PerformanceCapture capture;
+    double captureTempo=120,previousScenePPQ=0;
+    bool haveScenePPQ=false;
+    int hostNum=4,hostDen=4;
+    void setParameter(const juce::String&,float);
+    void applyQueuedScene();
     jerzy::Instrument instrument;
     jerzy::Parameters current;
     double sr=48000, localPPQ=0;

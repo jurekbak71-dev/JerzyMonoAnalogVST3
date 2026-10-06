@@ -43,7 +43,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout BassAmbientProcessor::layout
 BassAmbientProcessor::BassAmbientProcessor()
     : AudioProcessor(BusesProperties().withOutput("Stereo output",juce::AudioChannelSet::stereo(),true)),
       state(*this,nullptr,"JerzyBassAmbient",layout()) {
-    for(const auto& s:parameterSpecs()) values.push_back(state.getRawParameterValue(s.id));
+    for(const auto& s:parameterSpecs()) {values.push_back(state.getRawParameterValue(s.id));hostParameters.push_back(state.getParameter(s.id));}
+    for(auto& scene:sceneData)scene.resize(values.size());
+    instrument.observer=[](void* context,int n,int ch,double v,double duration) {
+        auto* self=static_cast<BassAmbientProcessor*>(context);
+        self->capture.note(n,ch,v,duration<0?duration:duration*self->captureTempo/60);
+    };instrument.observerContext=this;
 }
 
 jerzy::Parameters BassAmbientProcessor::readParameters() const {
@@ -75,7 +80,7 @@ jerzy::Parameters BassAmbientProcessor::readParameters() const {
 }
 
 void BassAmbientProcessor::prepareToPlay(double sampleRate,int) {
-    sr=sampleRate;instrument.prepare(sr);current=readParameters();localPPQ=0;resetRequested=false;
+    sr=sampleRate;instrument.prepare(sr);current=readParameters();localPPQ=0;resetRequested=false;capture.prepare(sr);haveScenePPQ=false;
 }
 bool BassAmbientProcessor::isBusesLayoutSupported(const BusesLayout& buses) const {
     return buses.getMainInputChannelSet().isDisabled()&&buses.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();
@@ -113,16 +118,22 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
         c.order=t.order;
     }
     current.masterFX=previous.masterFX;
-    double tempo=120,ppq=localPPQ;bool playing=false;int num=4,den=4;
+    double tempo=target.previewTempo,ppq=localPPQ;bool playing=false;int num=4,den=4;
     if(auto* head=getPlayHead()) if(auto position=head->getPosition()) {
-        if(auto t=position->getBpm()) tempo=*t;
+        if(auto t=position->getBpm()) if(position->getIsPlaying()) tempo=*t;
         if(auto t=position->getPpqPosition()) ppq=*t;
         if(auto t=position->getTimeSignature()) { num=t->numerator;den=t->denominator; }
         playing=position->getIsPlaying();
         // While stopped, retain a local clock for live playing / preview.
         if(!playing) ppq=localPPQ;
     }
-    tempo=juce::jlimit(20.0,400.0,tempo);instrument.beginBlock(ppq,tempo,playing);
+    tempo=juce::jlimit(20.0,400.0,tempo);captureTempo=tempo;hostNum=num;hostDen=den;
+    if(playing) {auditionBass=false;auditionPad=false;}
+    hostRunning=playing;
+    instrument.beginBlock(ppq,tempo,playing);
+    // Preview controls belong to the editor, never to saved host automation.
+    instrument.setPreview(auditionBass.load(),auditionPad.load(),target.previewNote,target,ppq);
+    if(!playing&&requestedScene.load()>=0) {applyQueuedScene();target=readParameters();}
     const double increment=tempo/(60*sr),smoothing=1-std::exp(-1/(sr*.02));
     auto event=midi.cbegin();const auto end=midi.cend();float maximum=0;
     for(int sample=0;sample<audio.getNumSamples();++sample) {
@@ -150,16 +161,37 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
         }
         current.masterFX+=(target.masterFX-current.masterFX)*smoothing;
         const double position=ppq+sample*increment;
+        double bar=double(num)*4/std::max(1,den);
+        if(playing&&requestedScene.load()>=0&&(!haveScenePPQ||std::floor(position/bar)!=std::floor(previousScenePPQ/bar))) {
+            applyQueuedScene();target=readParameters();
+            // Adopt switches immediately at the bar boundary; smooth continuous parameters below.
+#define BOOL(f,l,g) current.f=target.f;
+#define FLOAT(f,a,b,s,l,g)
+#define INT(f,a,b,l,g) current.f=target.f;
+#define CHOICE(f,l,g,c) current.f=target.f;
+#define CHOICE_DEN(f,l,g) current.f=target.f;
+#include "Parameters.def"
+#undef BOOL
+#undef FLOAT
+#undef INT
+#undef CHOICE
+#undef CHOICE_DEN
+        }
+        previousScenePPQ=position;haveScenePPQ=true;
         while(event!=end&&(*event).samplePosition<=sample) {
             auto m=(*event).getMessage();int ch=m.getChannel();
             if(m.isNoteOn()) instrument.noteOn(m.getNoteNumber(),ch,m.getFloatVelocity(),current,position);
             else if(m.isNoteOff()) instrument.noteOff(m.getNoteNumber(),ch,current,position);
             else if(m.isPitchWheel()) instrument.pitchBend(ch,m.getPitchWheelValue());
             else if(m.isController()) instrument.controller(ch,m.getControllerNumber(),m.getControllerValue(),current,position);
-            else if(m.isAllNotesOff()||m.isAllSoundOff()) instrument.allOff();
+            else if(m.isAllSoundOff()) instrument.reset();
+            else if(m.isAllNotesOff()) instrument.allOff();
             ++event;
         }
-        auto output=instrument.next(current,position,num,den);
+        auto renderParameters=current;
+        if(!playing) {renderParameters.bass=current.bass||auditionBass.load();renderParameters.pad=current.pad||auditionPad.load();}
+        auto output=instrument.next(renderParameters,position,num,den);
+        capture.push(float(output.l),float(output.r),tempo);
         audio.setSample(0,sample,float(output.l));audio.setSample(1,sample,float(output.r));
         maximum=std::max(maximum,float(std::max(std::abs(output.l),std::abs(output.r))));
     }
@@ -168,7 +200,15 @@ void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::Mi
 }
 
 void BassAmbientProcessor::getStateInformation(juce::MemoryBlock& output) {
-    auto tree=state.copyState();tree.setProperty("schemaVersion",2,nullptr);
+    auto tree=state.copyState();tree.setProperty("schemaVersion",3,nullptr);
+    for(int i=tree.getNumChildren()-1;i>=0;--i)if(tree.getChild(i).hasType("SCENES"))tree.removeChild(i,nullptr);
+    juce::ValueTree scenes("SCENES");
+    for(int k=0;k<4;++k)if(sceneReady[size_t(k)].load()) {
+        juce::ValueTree scene("SCENE");scene.setProperty("slot",k,nullptr);
+        for(size_t i=0;i<hostParameters.size();++i)scene.setProperty(hostParameters[i]->paramID,sceneData[size_t(k)][i],nullptr);
+        scenes.appendChild(scene,nullptr);
+    }
+    tree.appendChild(scenes,nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,output);
 }
 void BassAmbientProcessor::setStateInformation(const void* data,int size) {
@@ -188,7 +228,17 @@ void BassAmbientProcessor::setStateInformation(const void* data,int size) {
                 child.setProperty("value",spec.initial,nullptr);tree.appendChild(child,nullptr);
             }
         }
-        state.replaceState(tree);resetRequested=true;
+        for(int k=0;k<4;++k) {
+            sceneReady[size_t(k)]=false;
+            auto scene=tree.getChildWithName("SCENES").getChildWithProperty("slot",k);
+            if(scene.isValid()) {
+                for(size_t i=0;i<hostParameters.size();++i)sceneData[size_t(k)][i]=float(scene.getProperty(hostParameters[i]->paramID,hostParameters[i]->getDefaultValue()));
+                sceneReady[size_t(k)]=true;
+            }
+        }
+        state.replaceState(tree);
+        lastLocks={{state.getRawParameterValue("lockNotes")->load()>.5f,state.getRawParameterValue("lockRhythm")->load()>.5f,state.getRawParameterValue("lockTimbre")->load()>.5f}};
+        resetRequested=true;requestedScene=-1;auditionBass=false;auditionPad=false;
     }
 }
 void BassAmbientProcessor::applyPreset(int preset) {
@@ -204,6 +254,92 @@ void BassAmbientProcessor::applyPreset(int preset) {
     if(preset==4) { set("bass",0);set("pad",1);set("padMode",2);set("engine1",3);set("engine2",4);set("pad_fxGrain",1);set("pad_grainPitch",7);set("pad_damage",.35f);set("motion",.7f); }
     if(preset==5) { set("bass",1);set("pad",1);set("model",2);set("padLevel",.25f);set("padAttack",4);set("padRelease",8); }
     resetRequested=true;
+}
+void BassAmbientProcessor::setParameter(const juce::String& id,float value) {
+    if(auto* p=state.getParameter(id)) {p->beginChangeGesture();p->setValueNotifyingHost(p->convertTo0to1(value));p->endChangeGesture();}
+}
+void BassAmbientProcessor::synchroniseLocks() {
+    const char* locks[]{"lockNotes","lockRhythm","lockTimbre"};
+    const char* seeds[]{"phraseSeed","rhythmSeed","timbreSeed"};
+    for(size_t i=0;i<3;++i) {
+        bool locked=state.getRawParameterValue(locks[i])->load()>.5f;
+        if(locked&&!lastLocks[i])setParameter(seeds[i],state.getRawParameterValue("seed")->load());
+        lastLocks[i]=locked;
+    }
+}
+void BassAmbientProcessor::generate(bool mutation) {
+    synchroniseLocks();getStateInformation(undoState);
+    auto random=juce::Random::getSystemRandom().nextInt(65535)+1;
+    if(mutation)setParameter("mutation",float((int(state.getRawParameterValue("mutation")->load())+1)%65536));
+    else {setParameter("seed",float(random));setParameter("mutation",0);}
+    if(!mutation) {
+        if(!readParameters().lockRhythm) {setParameter("density",.45f+juce::Random::getSystemRandom().nextFloat()*.5f);setParameter("rhythmDensity",.4f+juce::Random::getSystemRandom().nextFloat()*.5f);}
+        if(!readParameters().lockNotes)setParameter("movement",.2f+juce::Random::getSystemRandom().nextFloat()*.7f);
+    }
+    if(!readParameters().lockTimbre) {
+        float strength=mutation?.1f:.4f;
+        auto change=[&](const char* id) {float v=state.getRawParameterValue(id)->load();setParameter(id,juce::jlimit(0.0f,1.0f,v+(juce::Random::getSystemRandom().nextFloat()*2-1)*strength));};
+        change("padBlend");change("motion");change("krellFM");
+    }
+    if(!readParameters().lockFX) {
+        auto v=state.getRawParameterValue("pad_chorusDepth")->load();
+        setParameter("pad_chorusDepth",juce::jlimit(0.0f,1.0f,v+(juce::Random::getSystemRandom().nextFloat()-.5f)*(mutation?.15f:.5f)));
+    }
+}
+void BassAmbientProcessor::undoGeneration() {
+    if(undoState.getSize()) {auto previous=undoState;juce::MemoryBlock now;getStateInformation(now);setStateInformation(previous.getData(),int(previous.getSize()));undoState=now;}
+}
+bool BassAmbientProcessor::hasScene(int index) const {return index>=0&&index<4&&sceneReady[size_t(index)].load();}
+void BassAmbientProcessor::saveScene(int index) {
+    if(index<0||index>=4)return;
+    // Saving snapshots is a UI operation; suspend protects the preallocated scene array.
+    const juce::ScopedLock lock(getCallbackLock());
+    sceneReady[size_t(index)]=false;
+    for(size_t i=0;i<hostParameters.size();++i)sceneData[size_t(index)][i]=hostParameters[i]->getValue();
+    sceneReady[size_t(index)]=true;
+}
+void BassAmbientProcessor::applyQueuedScene() {
+    int scene=requestedScene.exchange(-1);if(!hasScene(scene))return;
+    for(size_t i=0;i<hostParameters.size();++i)hostParameters[i]->setValueNotifyingHost(sceneData[size_t(scene)][i]);
+    activeScene=scene;
+}
+bool BassAmbientProcessor::exportCapture(const juce::File& file,bool asMidi,juce::String& error) {
+    PerformanceCapture::Snapshot snap;
+    if(!capture.snapshot(snap,16)) {error="Capture unavailable or overwritten. Play a phrase and retry.";return false;}
+    auto stream=file.createOutputStream();if(!stream||!stream->openedOk()){error="Cannot create output file.";return false;}
+    stream->setPosition(0);stream->truncate();
+    if(asMidi) {
+        juce::MidiMessageSequence sequence;
+        auto tempoMessage=juce::MidiMessage::tempoMetaEvent(int(60000000/snap.bpm));sequence.addEvent(tempoMessage);
+        const double end=(snap.endBeat-snap.startBeat)*960;
+        std::array<std::array<bool,128>,16> open{};
+        for(const auto& n:snap.notes) {
+            int ch=juce::jlimit(1,16,n.channel),note=juce::jlimit(0,127,n.note);
+            double tick=(n.beat-snap.startBeat)*960;
+            if(n.duration>=0&&n.velocity>0) {
+                double off=tick+n.duration*960;
+                if(off<=0)continue;
+                auto on=juce::MidiMessage::noteOn(ch,note,n.velocity);on.setTimeStamp(std::max(0.0,tick));sequence.addEvent(on);
+                auto stop=juce::MidiMessage::noteOff(ch,note);stop.setTimeStamp(std::min(end,off));sequence.addEvent(stop);
+            } else {
+                if(tick<0) {open[size_t(ch-1)][size_t(note)]=n.velocity>0;continue;}
+                auto m=n.velocity>0?juce::MidiMessage::noteOn(ch,note,n.velocity):juce::MidiMessage::noteOff(ch,note);
+                m.setTimeStamp(tick);sequence.addEvent(m);
+            }
+        }
+        for(int ch=1;ch<=16;++ch)for(int n=0;n<128;++n) {
+            if(open[size_t(ch-1)][size_t(n)]) {auto m=juce::MidiMessage::noteOn(ch,n,.7f);m.setTimeStamp(0);sequence.addEvent(m);}
+            auto stop=juce::MidiMessage::noteOff(ch,n);stop.setTimeStamp(end);sequence.addEvent(stop);
+        }
+        sequence.sort();sequence.updateMatchedPairs();juce::MidiFile midi;midi.setTicksPerQuarterNote(960);midi.addTrack(sequence);
+        if(!midi.writeTo(*stream)){error="MIDI export failed.";return false;}
+    } else {
+        juce::WavAudioFormat format;
+        std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(stream.get(),snap.sr,2,24,{},0));
+        if(!writer){error="WAV writer unavailable.";return false;}stream.release();
+        if(!writer->writeFromAudioSampleBuffer(snap.audio,0,snap.audio.getNumSamples())){error="WAV export failed.";return false;}
+    }
+    return true;
 }
 juce::AudioProcessorEditor* BassAmbientProcessor::createEditor() { return new BassAmbientEditor(*this); }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new BassAmbientProcessor(); }

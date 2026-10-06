@@ -18,7 +18,12 @@ private:
     juce::ComboBox rackSelector;
     juce::Viewport viewport;
     juce::ComboBox presets;
-    juce::TextButton mutate{"MUTATE"},panic{"PANIC"};
+    juce::TextButton generate{"GENERATE"},mutate{"MUTATE"},undo{"UNDO"},panic{"PANIC"};
+    juce::TextButton bassPlay{"BASS START"},padPlay{"AMBIENT START"},midiExport{"SAVE MIDI"},wavExport{"SAVE WAV"},storeScene{"STORE"};
+    std::array<juce::TextButton,4> scenes;
+    bool storing=false;
+    std::unique_ptr<juce::FileChooser> chooser;
+    void exportPerformance(bool midi);
     juce::Label status;
     int selected=0, selectedRack=0;
     Page& currentPage();
