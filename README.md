@@ -11,11 +11,24 @@ Samodzielny monofoniczny syntezator analog-modeling VST3/Standalone oparty na JU
 - LFO z synchronizacją do tempa
 - glide, legato, retrigger i wybór priorytetu nut
 - arpeggiator
+- przełącznik GRID → ARP: kroki sekwencera i pady Launch wyzwalają arpeggiator, gdy ARP jest włączony; bramki i ratchety GRID zwalniają i ponawiają nuty
 - siatka 8×8 RGB jako sekwencer / launch-pad
 - root note, wybór skali i długość sekwencji do 8 banków / 64 kroków
 - uruchamianie sekwencera przez MIDI
 - parametry automatyzowalne przez host/DAW
 - 4× wewnętrzny oversampling i filtracja antyaliasingowa
+
+## 0.10.0 — GRID → ARP i wydajność
+
+Włącz `ARP ON` oraz `GRID → ARP` na stronie GRID lub ARP. Sekwencer GRID
+lub pady w trybie Launch przekazują nuty do arpeggiatora. Wyłączenie
+`GRID → ARP` pozostawia zwykłe odtwarzanie GRID. Stare presety domyślnie
+mają tę opcję wyłączoną. Przełącznik podlega automatyzacji w DAW.
+
+Odczyty ustawień GRID są wykonywane raz na blok audio. Bufory MIDI są
+ponownie używane między blokami, a zbędne kopiowanie MIDI zostało usunięte.
+Efekty pomijają wyłączone moduły, a panel nie odświeża całego tła co 50 ms.
+Algorytm syntezy, oversampling i parametry brzmieniowe pozostają bez zmian.
 
 ## Build Windows / FL Studio
 Wymagane: Visual Studio 2022 z workloadem Desktop development with C++ oraz CMake.
@@ -100,9 +113,9 @@ All states keep running and mode changes crossfade over approximately 3 ms
 (time constant; settling takes several time constants).
 
 The second ADSR is now labelled `MOD ENV`. `ENV > PITCH` independently applies
--24…+24 semitones to both VCOs (sub follows OSC1). `ENV > PWM` applies -100…+100%
+-24&+24 semitones to both VCOs (sub follows OSC1). `ENV > PWM` applies -100&+100%
 modulation depth to both pulse widths. It sums with manual PW and LFO PWM and
-is clamped to 5…95% duty cycle. PWM is audible on Square/Pulse waveforms.
+is clamped to 5&95% duty cycle. PWM is audible on Square/Pulse waveforms.
 The existing bipolar `ENV AMOUNT` continues routing this ADSR to filter cutoff.
 
 All three new parameters are appended after existing parameter IDs/indices.
@@ -119,7 +132,7 @@ The Ladder 24 dB path is unchanged when the new destinations are zero.
   and note-off events. MIDI input continues to trigger the synth and the Grid's
   MIDI-trigger mode. VST3 advertises MIDI output for routing in FL Studio.
 - Host Sync follows FL Studio transport position (PPQ), tempo and play/stop state.
-  Turn Host Sync off to use the internal clock and Swing. Pattern state and all new controls are saved with the
+  Turn Host Sync off to use the internal clock. Pattern state and all new controls are saved with the
   project; old presets receive safe defaults.
 - Design references: Circuit Mono Station User Guide (step direction/length,
   separate note and modulation sequencing concepts), Arturia KeyStep Pro and
@@ -147,3 +160,19 @@ left intact. Effects are bypassed by default to preserve existing presets.
   automatable and restores a neutral octave in older project states.
 - The FX page now lays out its six modules from the live editor bounds, keeping
   the chain controls and knobs inside their cards when the plugin is resized.
+
+
+## 0.9.0 — readable console, host swing and envelope routes
+
+- The Grid page devotes its lower half to the step matrix and large groove controls.
+  The old instructional text panel is removed. Labels and controls are separated
+  on every page, with larger value readouts and an editor size from 1200×600 to
+  1920×960 (default 1320×660).
+- Grid and Arp swing now work with FL Studio PPQ transport sync. Odd steps are
+  delayed and paired steps keep their total duration; gate and ratchets use the
+  correct step duration. The Grid Ping-Pong direction completes its return trip.
+- The filter envelope can additionally modulate OSC 2 pitch, resonance, mixer
+  drive and amplifier level. All four depths are bipolar, host-automatable,
+  saved with the project, and default to zero in older presets.
+- Values display percentages, milliseconds, semitones, dB or frequency where
+  appropriate. The clock and modulation paths have regression coverage.
