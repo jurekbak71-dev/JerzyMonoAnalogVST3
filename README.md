@@ -150,3 +150,5 @@ left intact. Effects are bypassed by default to preserve existing presets.
 
 
 <!-- Jerzy VST GUI System CI validation -->
+
+<!-- Jerzy GUI validation pass 2 -->
