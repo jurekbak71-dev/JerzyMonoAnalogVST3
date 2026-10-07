@@ -176,3 +176,5 @@ left intact. Effects are bypassed by default to preserve existing presets.
   saved with the project, and default to zero in older presets.
 - Values display percentages, milliseconds, semitones, dB or frequency where
   appropriate. The clock and modulation paths have regression coverage.
+
+<!-- final PR cleanup validation -->
