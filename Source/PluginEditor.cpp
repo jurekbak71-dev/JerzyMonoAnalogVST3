@@ -2,8 +2,8 @@
 
 namespace
 {
-constexpr auto RED=0xffdf7654, GREEN=0xff9faf7c, YELLOW=0xffe3b65c;
-constexpr auto PANEL=0xff292b29, EDGE=0xff777164;
+constexpr auto RED=0xffe69443, GREEN=0xff77b889, YELLOW=0xffffc46c;
+constexpr auto PANEL=0xff351815, EDGE=0xff8b503d;
 static juce::Colour C(juce::uint32 x){return juce::Colour(x);}
 static const juce::Colour lcdBg=C(0xffd5cdb8), lcdText=C(0xff24231f);
 static juce::String midiNoteName(int note)
@@ -20,7 +20,7 @@ static void drawLed(juce::Graphics& g, juce::Point<float> c, float r, juce::Colo
 }
 }
 
-JerzyLookAndFeel::JerzyLookAndFeel()
+JerzyLookAndFeel::JerzyLookAndFeel() : JerzyAudioUI::HardwareLookAndFeel(JerzyAudioUI::burgundy())
 {
     setColour(juce::Slider::textBoxTextColourId,lcdText);
     setColour(juce::Slider::textBoxBackgroundColourId,lcdBg);
