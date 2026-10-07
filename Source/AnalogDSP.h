@@ -457,6 +457,8 @@ struct MonoParameters
     double ampAttack = 0.005, ampDecay = 0.18, ampSustain = 0.75, ampRelease = 0.22;
     FilterMode filterMode = FilterMode::ladder24;
     double modEnvPitch = 0.0, modEnvPWM = 0.0;
+    double modEnvOsc2Pitch = 0.0, modEnvResonance = 0.0;
+    double modEnvMixDrive = 0.0, modEnvAmp = 0.0;
     double filterAttack = 0.002, filterDecay = 0.22, filterSustain = 0.2, filterRelease = 0.18;
     double glideSeconds = 0.0;
     double lfoRate = 2.0, lfoPitchCents = 0.0, lfoFilterOct = 0.0, lfoPWM = 0.0;
@@ -614,6 +616,10 @@ private:
         p.analogDriftCents = smoothed.analogDriftCents += smoothingCoefficient * (params.analogDriftCents - smoothed.analogDriftCents);
         p.modEnvPitch = smoothed.modEnvPitch += smoothingCoefficient * (params.modEnvPitch - smoothed.modEnvPitch);
         p.modEnvPWM = smoothed.modEnvPWM += smoothingCoefficient * (params.modEnvPWM - smoothed.modEnvPWM);
+        p.modEnvOsc2Pitch = smoothed.modEnvOsc2Pitch += smoothingCoefficient * (params.modEnvOsc2Pitch - smoothed.modEnvOsc2Pitch);
+        p.modEnvResonance = smoothed.modEnvResonance += smoothingCoefficient * (params.modEnvResonance - smoothed.modEnvResonance);
+        p.modEnvMixDrive = smoothed.modEnvMixDrive += smoothingCoefficient * (params.modEnvMixDrive - smoothed.modEnvMixDrive);
+        p.modEnvAmp = smoothed.modEnvAmp += smoothingCoefficient * (params.modEnvAmp - smoothed.modEnvAmp);
         if (p.glideSeconds > 0.0)
         {
             const double a = 1.0 - std::exp(-1.0 / (p.glideSeconds * sampleRate));
@@ -640,7 +646,7 @@ private:
         osc2.setDriftCents(p.analogDriftCents * 1.13);
         sub.setDriftCents(0.0);
         osc1.setFrequency(baseHz * std::pow(2.0, p.osc1Octave));
-        osc2.setFrequency(baseHz * std::pow(2.0, p.osc2Octave + p.osc2DetuneCents / 1200.0));
+        osc2.setFrequency(baseHz * std::pow(2.0, p.osc2Octave + p.osc2DetuneCents / 1200.0 + fe * p.modEnvOsc2Pitch / 12.0));
         sub.setFrequency(baseHz * std::pow(2.0, p.osc1Octave - 1));
 
         const double n = noiseDist(noiseRng);
@@ -654,16 +660,18 @@ private:
         // Mixer drive is a real pre-filter gain stage. Blend from clean at zero
         // to progressively harder transistor clipping without compensating away
         // the added harmonics and level.
-        const double mixDrive = 1.0 + 7.0 * juce::jlimit(0.0, 1.0, p.mixerDrive);
+        const double driveAmount = juce::jlimit(0.0, 1.0, p.mixerDrive + fe * p.modEnvMixDrive);
+        const double mixDrive = 1.0 + 7.0 * driveAmount;
         const double drivenMix = saturateAsymmetric(mix * mixDrive);
-        mix += juce::jlimit(0.0, 1.0, p.mixerDrive) * (drivenMix - mix);
+        mix += driveAmount * (drivenMix - mix);
         mix = mixerDC.process(mix);
 
-        filter.setParams(p.cutoffHz, p.resonance, p.filterDrive, p.keyTrack, currentMidi);
+        const double resonance = juce::jlimit(0.0, 1.15, p.resonance + fe * p.modEnvResonance);
+        filter.setParams(p.cutoffHz, resonance, p.filterDrive, p.keyTrack, currentMidi);
         const double filterMod = fe * p.filterEnvOct + lf * p.lfoFilterOct;
         const double ladder = filter.process(mix, filterMod);
         const double keyOct = (currentMidi - 60.0) / 12.0 * p.keyTrack;
-        const auto classic = multimode.process(mix, p.cutoffHz * std::pow(2.0, keyOct + filterMod), p.resonance, p.filterDrive);
+        const auto classic = multimode.process(mix, p.cutoffHz * std::pow(2.0, keyOct + filterMod), resonance, p.filterDrive);
         double y = 0.0;
         const size_t selected = static_cast<size_t>(p.filterMode);
         // Keep all filter states running and crossfade; changing type never clears the tail.
@@ -674,7 +682,7 @@ private:
         }
 
         const double tremolo = 1.0 - p.lfoAmp * 0.5 * (lf + 1.0);
-        const double vca = y * ae * velocityGain * tremolo;
+        const double vca = y * ae * velocityGain * tremolo * juce::jlimit(0.0, 2.0, 1.0 + fe * p.modEnvAmp);
         const double vcaBiased = vca + 0.012 * vca * vca;
         y = saturateAsymmetric(vcaBiased * 1.28) / 1.12;
 
