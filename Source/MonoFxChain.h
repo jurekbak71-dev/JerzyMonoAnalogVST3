@@ -56,27 +56,38 @@ public:
         const bool stereo=b.getNumChannels()>1;
         auto v=[&](const char* id){auto* p=state.getRawParameterValue(id); return p?p->load(std::memory_order_relaxed):0.0f;};
         const int n=b.getNumSamples(); float* l=b.getWritePointer(0); float* r=stereo?b.getWritePointer(1):l;
-        const float threshold=v("fxCompThreshold"), ratio=juce::jmax(1.0f,v("fxCompRatio"));
-        const float compAttack=(float)std::exp(-1.0/(sampleRate*juce::jmax(0.0005f,v("fxCompAttack"))));
-        const float compRelease=(float)std::exp(-1.0/(sampleRate*juce::jmax(0.005f,v("fxCompRelease"))));
-        const int delayDiv=(int)v("fxDelayDivision"), delayMode=(int)v("fxDelayMode");
-        static constexpr double q[]={4.0,2.0,1.0,0.5,0.25,0.125,2.0/3.0,1.0/3.0,1.0/6.0,1.5,0.75,0.375};
-        const int delaySamples=juce::jlimit(1,(int)delayL.size()-1,(int)(sampleRate*60.0/juce::jmax(20.0,bpm)*q[juce::jlimit(0,11,delayDiv)]));
-        const float delayFb=juce::jlimit(0.0f,0.94f,v("fxDelayFeedback")), delayMix=juce::jlimit(0.0f,1.0f,v("fxDelayMix"));
-        const float room=juce::jlimit(0.0f,1.0f,v("fxReverbSize")), damp=juce::jlimit(0.0f,1.0f,v("fxReverbDamping"));
-        const float reverbMix=juce::jlimit(0.0f,1.0f,v("fxReverbMix"));
-        const float width=juce::jlimit(0.0f,2.0f,v("fxWidth"));
-        const int chorusMode=(int)v("fxChorusMode"); const float chorusRate=juce::jlimit(0.05f,8.0f,v("fxChorusRate"));
-        const float chorusDepth=juce::jlimit(0.0f,1.0f,v("fxChorusDepth")), chorusMix=juce::jlimit(0.0f,1.0f,v("fxChorusMix"));
-        const float chorusFb=juce::jlimit(-0.85f,0.85f,v("fxChorusFeedback"));
-        const float rotaryDepth=juce::jlimit(0.0f,1.0f,v("fxRotaryDepth"));
-        const bool rotarySync=v("fxRotarySync")>0.5f; const int rotaryDiv=(int)v("fxRotaryDivision");
-        const double rotaryHz=rotarySync ? (bpm/60.0)/q[juce::jlimit(0,11,rotaryDiv)] : juce::jlimit(0.1f,8.0f,v("fxRotaryRate"));
         const auto chain=getOrder();
+        bool enabled[count]{};
+        bool anyEnabled=false;
+        for(int effect=0;effect<count;++effect)
+        {
+            enabled[effect]=v(enabledIds[effect])>=0.5f && (stereo || effect==0);
+            anyEnabled|=enabled[effect];
+        }
+        if(!anyEnabled) return;
+        const float threshold=enabled[0]?v("fxCompThreshold"):0.0f, ratio=enabled[0]?juce::jmax(1.0f,v("fxCompRatio")):1.0f;
+        const float compAttack=enabled[0]?(float)std::exp(-1.0/(sampleRate*juce::jmax(0.0005f,v("fxCompAttack")))):0.0f;
+        const float compRelease=enabled[0]?(float)std::exp(-1.0/(sampleRate*juce::jmax(0.005f,v("fxCompRelease")))):0.0f;
+        const float amount=enabled[0]?juce::jlimit(0.0f,1.0f,v("fxCompDrive")):0.0f;
+        const float pre=1.0f+amount*9.0f;
+        const int delayDiv=enabled[1]?(int)v("fxDelayDivision"):0, delayMode=enabled[1]?(int)v("fxDelayMode"):0;
+        static constexpr double q[]={4.0,2.0,1.0,0.5,0.25,0.125,2.0/3.0,1.0/3.0,1.0/6.0,1.5,0.75,0.375};
+        const int delaySamples=enabled[1]?juce::jlimit(1,(int)delayL.size()-1,(int)(sampleRate*60.0/juce::jmax(20.0,bpm)*q[juce::jlimit(0,11,delayDiv)])):1;
+        const float delayFb=enabled[1]?juce::jlimit(0.0f,0.94f,v("fxDelayFeedback")):0.0f, delayMix=enabled[1]?juce::jlimit(0.0f,1.0f,v("fxDelayMix")):0.0f;
+        const float room=enabled[2]?juce::jlimit(0.0f,1.0f,v("fxReverbSize")):0.0f, damp=enabled[2]?juce::jlimit(0.0f,1.0f,v("fxReverbDamping")):0.0f;
+        const float reverbMix=enabled[2]?juce::jlimit(0.0f,1.0f,v("fxReverbMix")):0.0f;
+        const float width=enabled[3]?juce::jlimit(0.0f,2.0f,v("fxWidth")):0.0f;
+        const int widthTap=(int)(sampleRate*(0.003+0.009*juce::jlimit(0.0f,1.0f,width*0.5f)));
+        const int chorusMode=enabled[4]?(int)v("fxChorusMode"):0; const float chorusRate=enabled[4]?juce::jlimit(0.05f,8.0f,v("fxChorusRate")):0.0f;
+        const float chorusDepth=enabled[4]?juce::jlimit(0.0f,1.0f,v("fxChorusDepth")):0.0f, chorusMix=enabled[4]?juce::jlimit(0.0f,1.0f,v("fxChorusMix")):0.0f;
+        const float chorusFb=enabled[4]?juce::jlimit(-0.85f,0.85f,v("fxChorusFeedback")):0.0f;
+        const float rotaryDepth=enabled[5]?juce::jlimit(0.0f,1.0f,v("fxRotaryDepth")):0.0f;
+        const bool rotarySync=enabled[5] && v("fxRotarySync")>0.5f; const int rotaryDiv=enabled[5]?(int)v("fxRotaryDivision"):0;
+        const double rotaryHz=!enabled[5]?0.0:rotarySync ? (bpm/60.0)/q[juce::jlimit(0,11,rotaryDiv)] : juce::jlimit(0.1f,8.0f,v("fxRotaryRate"));
         for(int slot=0;slot<count;++slot)
         {
             const int effect=chain[(size_t)slot];
-            if(v(enabledIds[effect])<0.5f) continue;
+            if(!enabled[effect]) continue;
             // The linked compressor also works on a mono instrument bus.
             // Stereo-only spatial effects remain bypassed on mono layouts.
             if(!stereo && effect!=0) continue;
@@ -97,8 +108,6 @@ public:
                         // Conservative automatic makeup restores body after compression.
                         const float makeupDb=juce::jlimit(0.0f,6.0f,-threshold*(1.0f-1.0f/ratio)*0.18f);
                         const float gain=juce::Decibels::decibelsToGain(reductionDb+makeupDb);
-                        const float amount=juce::jlimit(0.0f,1.0f,v("fxCompDrive"));
-                        const float pre=1.0f+amount*9.0f;
                         const float dryL=l[i],dryR=r[i];
                         const float colourL=std::tanh(dryL*pre),colourR=std::tanh(dryR*pre);
                         l[i]=(dryL+(colourL-dryL)*amount)*gain;
@@ -107,7 +116,8 @@ public:
                 case 1:
                     for(int i=0;i<n;++i)
                     {
-                        const int rd=(writePos-delaySamples+(int)delayL.size())%(int)delayL.size();
+                        int rd=writePos-delaySamples;
+                        if(rd<0) rd+=(int)delayL.size();
                         const float dl=delayL[(size_t)rd], dr=delayR[(size_t)rd], inL=l[i], inR=r[i];
                         const float fbL=delayMode==2?dr:dl, fbR=delayMode==2?dl:dr;
                         if(delayMode==2)
@@ -130,7 +140,7 @@ public:
                     reverb.setParameters(reverbParams);
                     reverb.processStereo(l,r,n); break;
                 case 3:
-                    for(int i=0;i<n;++i){const float mid=0.5f*(l[i]+r[i]);const int tap=(int)(sampleRate*(0.003+0.009*juce::jlimit(0.0f,1.0f,width*0.5f)));const float delayed=widthLine[(size_t)((widthPos-tap+(int)widthLine.size())%(int)widthLine.size())];widthLine[(size_t)widthPos]=mid;const float side=0.5f*(l[i]-r[i])+0.35f*(mid-delayed)*width;l[i]=mid+side;r[i]=mid-side;if(++widthPos>=(int)widthLine.size())widthPos=0;} break;
+                    for(int i=0;i<n;++i){const float mid=0.5f*(l[i]+r[i]);int rd=widthPos-widthTap;if(rd<0)rd+=(int)widthLine.size();const float delayed=widthLine[(size_t)rd];widthLine[(size_t)widthPos]=mid;const float side=0.5f*(l[i]-r[i])+0.35f*(mid-delayed)*width;l[i]=mid+side;r[i]=mid-side;if(++widthPos>=(int)widthLine.size())widthPos=0;} break;
                 case 4:
                     for(int i=0;i<n;++i)
                     {

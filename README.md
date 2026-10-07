@@ -11,11 +11,24 @@ Samodzielny monofoniczny syntezator analog-modeling VST3/Standalone oparty na JU
 - LFO z synchronizacją do tempa
 - glide, legato, retrigger i wybór priorytetu nut
 - arpeggiator
+- przełącznik GRID → ARP: kroki sekwencera i pady Launch wyzwalają arpeggiator, gdy ARP jest włączony; bramki i ratchety GRID zwalniają i ponawiają nuty
 - siatka 8×8 RGB jako sekwencer / launch-pad
 - root note, wybór skali i długość sekwencji do 8 banków / 64 kroków
 - uruchamianie sekwencera przez MIDI
 - parametry automatyzowalne przez host/DAW
 - 4× wewnętrzny oversampling i filtracja antyaliasingowa
+
+## 0.10.0 — GRID → ARP i wydajność
+
+Włącz `ARP ON` oraz `GRID → ARP` na stronie GRID lub ARP. Sekwencer GRID
+lub pady w trybie Launch przekazują nuty do arpeggiatora. Wyłączenie
+`GRID → ARP` pozostawia zwykłe odtwarzanie GRID. Stare presety domyślnie
+mają tę opcję wyłączoną. Przełącznik podlega automatyzacji w DAW.
+
+Odczyty ustawień GRID są wykonywane raz na blok audio. Bufory MIDI są
+ponownie używane między blokami, a zbędne kopiowanie MIDI zostało usunięte.
+Efekty pomijają wyłączone moduły, a panel nie odświeża całego tła co 50 ms.
+Algorytm syntezy, oversampling i parametry brzmieniowe pozostają bez zmian.
 
 ## Build Windows / FL Studio
 Wymagane: Visual Studio 2022 z workloadem Desktop development with C++ oraz CMake.

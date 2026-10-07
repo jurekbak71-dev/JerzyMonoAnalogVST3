@@ -121,7 +121,7 @@ private:
 
     juce::Label title,subtitle,preset;
     std::array<juce::TextButton,6> pageButtons;
-    juce::ToggleButton gridSeqOn,gridMidiTrigger,gridHostSync;
+    juce::ToggleButton gridSeqOn,gridMidiTrigger,gridHostSync,gridToArp;
     juce::TextButton gridModeButton,gridClearButton;
     juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection,gridOctave;
     ResetSlider gridGate,gridSwing,gridVelocity,gridProbability;
@@ -159,7 +159,7 @@ private:
     std::unique_ptr<SliderAttachment> glideA,outDriveA,masterA,arpGateA,arpSwingA,arpVelocityA,gridGateA,gridSwingA,gridVelocityA;
     std::unique_ptr<SliderAttachment> gridProbabilityA;
     std::unique_ptr<ComboAttachment> gridRatchetA;
-    std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA,gridHostSyncA,arpHostSyncA;
+    std::unique_ptr<ButtonAttachment> legatoA,retriggerA,lfoSyncA,arpOnA,arpLatchA,arpRetriggerA,gridSeqOnA,gridMidiTriggerA,gridHostSyncA,arpHostSyncA,gridToArpA;
 
     int modulePage=0;
     bool padsPage=false;

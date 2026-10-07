@@ -50,14 +50,20 @@ public:
 private:
     int getChoiceIndex(const char* id) const;
     int chooseArpNote(int pattern, int step);
+    int arpNoteCount() const;
     bool arpRhythmGate(int rhythm, int step) const;
     void resetArpState();
     void processGridSequencerSample(double bpm,int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool hostHasPpq,bool hostPlaying);
+    void processLaunchPadSample(int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool routeToArp);
+    void startGridNote(int note,float velocity,int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool routeToArp);
+    void stopGridNote(int sampleOffset,juce::MidiBuffer& generatedMidi);
+    void stopLaunchNote(int sampleOffset,juce::MidiBuffer& generatedMidi);
     int gridNoteForRow(int row) const;
     int gridRootMidiFromChoice() const;
     bool isGridMidiRunning() const noexcept { return gridMidiRunning.load(); }
     jerzy::MonoAnalogEngine engine;
     MonoFxChain fxChain;
+    juce::MidiBuffer inputMidiScratch, generatedMidiScratch;
     std::atomic<float> outputMeter { 0.0f };
     double currentSampleRate = 44100.0;
     double arpSamplesToNext = 0.0;
@@ -88,6 +94,20 @@ private:
     int lastArpHostStep = -1;
     int lastGridHostStep = -1;
     int gridCurrentNote = -1;
+    bool gridCurrentNoteRouted = false;
+    int gridArpNote = -1;
+    int launchCurrentNote = -1;
+    bool launchCurrentNoteRouted = false;
+    int launchArpNote = -1;
+    bool gridArpNeedsRestart = false;
+    double arpGridPpqOrigin = 0.0;
+    struct GridSettings
+    {
+        bool armed = false, midiTrigger = false, hostSync = false, routeToArp = false;
+        int totalSteps = 8, division = 0, ratchets = 1, direction = 0;
+        double swing = 0.0, gate = 0.75;
+        float velocity = 0.95f, probability = 1.0f;
+    } gridSettings;
     int gridRatchetCount = 1;
     int gridRatchetIndex = 0;
     int gridStepNote = -1;

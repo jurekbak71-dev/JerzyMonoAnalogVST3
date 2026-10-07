@@ -360,6 +360,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupToggle(gridSeqOn,"SEQ PLAY",C(GREEN));
     setupToggle(gridMidiTrigger,"MIDI TRIG",C(YELLOW));
     setupToggle(gridHostSync,"HOST SYNC",C(GREEN));
+    setupToggle(gridToArp,"GRID → ARP",C(YELLOW));
     setupCombo(gridDivision,{"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/16T","1/4D","1/8D","1/16D"});
     setupCombo(gridRoot,{"C1","C#1","D1","D#1","E1","F1","F#1","G1","G#1","A1","A#1","B1","C2","C#2","D2","D#2","E2","F2","F#2","G2","G#2","A2","A#2","B2","C3","C#3","D3","D#3","E3","F3","F#3","G3","G#3","A3","A#3","B3","C4","C#4","D4","D#4","E4","F4","F#4","G4","G#4","A4","A#4","B4","C5","C#5","D5","D#5","E5","F5","F#5","G5","G#5","A5","A#5","B5","C6"});
     setupCombo(gridScale,{"CHROMATIC","MAJOR","NAT MINOR","DORIAN","PHRYGIAN","MIXOLYDIAN","MAJOR PENT","MINOR PENT"});
@@ -442,6 +443,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     gridMidiTriggerA=std::make_unique<ButtonAttachment>(s,"gridMidiTrigger",gridMidiTrigger);
     gridHostSyncA=std::make_unique<ButtonAttachment>(s,"gridHostSync",gridHostSync);
     arpHostSyncA=std::make_unique<ButtonAttachment>(s,"arpHostSync",arpHostSync);
+    gridToArpA=std::make_unique<ButtonAttachment>(s,"gridToArp",gridToArp);
     gridDivisionA=std::make_unique<ComboAttachment>(s,"gridDivision",gridDivision);
     gridRootA=std::make_unique<ComboAttachment>(s,"gridRoot",gridRoot);
     gridScaleA=std::make_unique<ComboAttachment>(s,"gridScale",gridScale);
@@ -588,11 +590,11 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
         label("RESONANCE",75,540,300);label("MIX DRIVE",525,540,300);label("AMP",975,540,300);
     }else if(modulePage==3){
         label("MODE",30,112,135);label("BANK",175,112,110);label("PATTERN LENGTH",295,112,190);label("CLOCK DIVISION",495,112,180);label("SCALE",685,112,190);label("ROOT NOTE",885,112,150);label("DIRECTION",1045,112,175);label("OCTAVE",1230,112,165);
-        label("PLAY",155,174,130);label("MIDI TRIGGER",300,174,145);label("HOST SYNC",460,174,140);label("CLEAR",615,174,120);
+        label("PLAY",155,174,130);label("MIDI TRIGGER",300,174,145);label("HOST SYNC",460,174,140);label("CLEAR",615,174,120);label("GRID → ARP",750,174,160);
         label("VELOCITY",865,285,145);label("SWING",1030,285,145);label("PROBABILITY",1190,285,175);
         label("GATE",865,485,145);label("RATCHET",1070,485,200);
     }else if(modulePage==4){
-        label("RUN",35,115,130);label("HOST SYNC",180,115,150);label("LATCH",345,115,130);label("RETRIGGER",490,115,145);
+        label("RUN",35,115,130);label("HOST SYNC",180,115,150);label("LATCH",345,115,130);label("RETRIGGER",490,115,145);label("GRID → ARP",650,115,165);
         label("RATE",40,205,180);label("NOTE ORDER",245,205,210);label("RHYTHMIC PATTERN",480,205,220);label("OCTAVE RANGE",725,205,190);
         label("GATE",940,205,135);label("VELOCITY",1090,205,135);label("SWING",1240,205,135);
         g.setColour(C(0xffe6b755));g.setFont(juce::Font(juce::FontOptions("Arial",14*sc,juce::Font::bold)));
@@ -631,12 +633,12 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
         place(modEnvResonance,75,565,300,42);place(modEnvMixDrive,525,565,300,42);place(modEnvAmp,975,565,300,42);
     }else if(modulePage==3){
         place(gridModeButton,30,132,135,32);place(gridBankBox,175,132,110,32);place(gridBanks,295,132,190,32);place(gridDivision,495,132,180,32);place(gridScale,685,132,190,32);place(gridRoot,885,132,150,32);place(gridDirection,1045,132,175,32);place(gridOctave,1230,132,165,32);
-        place(gridSeqOn,155,196,130,30);place(gridMidiTrigger,300,196,145,30);place(gridHostSync,460,196,140,30);place(gridClearButton,615,196,120,30);
+        place(gridSeqOn,155,196,130,30);place(gridMidiTrigger,300,196,145,30);place(gridHostSync,460,196,140,30);place(gridClearButton,615,196,120,30);place(gridToArp,750,196,160,30);
         place(padGrid,30,275,795,395);
         place(gridVelocity,870,310,135,155);place(gridSwing,1035,310,135,155);place(gridProbability,1200,310,135,155);
         place(gridGate,870,510,135,145);place(gridRatchet,1070,530,220,36);
     }else if(modulePage==4){
-        place(arpOn,35,140,130,36);place(arpHostSync,180,140,150,36);place(arpLatch,345,140,130,36);place(arpRetrigger,490,140,145,36);
+        place(arpOn,35,140,130,36);place(arpHostSync,180,140,150,36);place(arpLatch,345,140,130,36);place(arpRetrigger,490,140,145,36);place(gridToArp,650,140,165,36);
         place(arpDivision,35,225,180,38);place(arpPattern,245,225,210,38);place(arpRhythm,480,225,220,38);place(arpOctaves,725,225,190,38);
         place(arpGate,930,225,140,125);place(arpVelocity,1085,225,140,125);place(arpSwing,1240,225,140,125);
     }
@@ -656,7 +658,7 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
         &osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&filterMode,&lfoWave,&lfoDivision,&glideMode,&priority,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&gridDivision,&gridRoot,&gridScale,&gridBanks,&gridDirection,&gridOctave,&gridRatchet,
         &osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,
         &aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&glide,&outDrive,&master,&arpGate,&arpSwing,&arpVelocity,&gridGate,&gridSwing,&gridVelocity,&gridProbability,
-        &legato,&retrigger,&lfoSync,&arpOn,&arpLatch,&arpRetrigger,&arpHostSync,&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridModeButton,&gridClearButton,&gridBankBox,&padGrid,&outputMeter
+        &legato,&retrigger,&lfoSync,&arpOn,&arpLatch,&arpRetrigger,&arpHostSync,&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridToArp,&gridModeButton,&gridClearButton,&gridBankBox,&padGrid,&outputMeter
     };
     for(auto* c:all)c->setVisible(false);
     fxPanel.setVisible(fxPage);
@@ -664,8 +666,8 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
     if(modulePage==0)show({&osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&glide,&glideMode,&priority,&legato,&retrigger,&outDrive,&master,&outputMeter});
     if(modulePage==1)show({&filterMode,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,&aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR});
     if(modulePage==2)show({&lfoWave,&lfoDivision,&lfoSync,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp});
-    if(modulePage==3)show({&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridModeButton,&gridClearButton,&gridBankBox,&gridBanks,&gridDivision,&gridScale,&gridRoot,&gridDirection,&gridOctave,&gridRatchet,&gridGate,&gridSwing,&gridVelocity,&gridProbability,&padGrid});
-    if(modulePage==4)show({&arpOn,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&arpGate,&arpVelocity,&arpSwing,&arpHostSync,&arpLatch,&arpRetrigger});
+    if(modulePage==3)show({&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridToArp,&gridModeButton,&gridClearButton,&gridBankBox,&gridBanks,&gridDivision,&gridScale,&gridRoot,&gridDirection,&gridOctave,&gridRatchet,&gridGate,&gridSwing,&gridVelocity,&gridProbability,&padGrid});
+    if(modulePage==4)show({&arpOn,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&arpGate,&arpVelocity,&arpSwing,&arpHostSync,&arpLatch,&arpRetrigger,&gridToArp});
     if(modulePage==0){for(auto* c:{(juce::Component*)&glideMode,(juce::Component*)&priority})c->setVisible(true);}
     const int w=getWidth();getConstrainer()->setFixedAspectRatio(2.0);setSize(w,juce::roundToInt(720.0f*(w/1440.0f)));resized();repaint();
 }
@@ -692,7 +694,6 @@ void JerzyMonoAnalogAudioProcessorEditor::updateGridControls()
 void JerzyMonoAnalogAudioProcessorEditor::timerCallback()
 {
     outputMeter.setLevel(proc.getOutputMeter());
-    if(!padsPage) repaint();
     const bool sync=lfoSync.getToggleState();lfoRate.setEnabled(!sync);lfoDivision.setEnabled(sync);
     arpSwing.setEnabled(true);
     gridSwing.setEnabled(proc.getGridMode()!=JerzyMonoAnalogAudioProcessor::GridMode::launch);

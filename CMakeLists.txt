@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(JerzyMonoAnalog VERSION 0.9.0 LANGUAGES C CXX)
+project(JerzyMonoAnalog VERSION 0.10.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,4 +68,11 @@ if(BUILD_TESTING)
     target_compile_definitions(MonoDSPTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(MonoDSPTests PRIVATE juce::juce_core)
     add_test(NAME MonoDSP COMMAND MonoDSPTests)
+
+    juce_add_console_app(MonoProcessorTests PRODUCT_NAME "Mono Processor Tests")
+    juce_generate_juce_header(MonoProcessorTests)
+    target_sources(MonoProcessorTests PRIVATE tests/ProcessorTests.cpp)
+    target_include_directories(MonoProcessorTests PRIVATE Source)
+    target_link_libraries(MonoProcessorTests PRIVATE JerzyMonoAnalog juce::juce_audio_utils)
+    add_test(NAME MonoProcessor COMMAND MonoProcessorTests)
 endif()
