@@ -1,8 +1,9 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "JerzyVSTGuiKit.h"
 
-class JerzyLookAndFeel : public juce::LookAndFeel_V4
+class JerzyLookAndFeel : public JerzyAudioUI::HardwareLookAndFeel
 {
 public:
     JerzyLookAndFeel();
