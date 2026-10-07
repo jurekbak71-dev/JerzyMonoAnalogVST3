@@ -36,6 +36,7 @@ target_sources(JerzyMonoAnalog PRIVATE
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
     Source/PluginEditor.h
+    Source/JerzyVSTGuiKit.h
     Source/AnalogDSP.h
     Source/AnalogEnvelope.h
     Source/SequencerClock.h
