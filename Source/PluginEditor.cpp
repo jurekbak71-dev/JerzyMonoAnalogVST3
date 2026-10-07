@@ -21,6 +21,7 @@ static void drawLed(juce::Graphics& g, juce::Point<float> c, float r, juce::Colo
 }
 
 JerzyLookAndFeel::JerzyLookAndFeel()
+    : JerzyAudioUI::HardwareLookAndFeel(JerzyAudioUI::burgundy())
 {
     setColour(juce::Slider::textBoxTextColourId,lcdText);
     setColour(juce::Slider::textBoxBackgroundColourId,lcdBg);
@@ -562,8 +563,8 @@ void JerzyMonoAnalogAudioProcessorEditor::drawEnvelope(juce::Graphics&g,juce::Re
 
 void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(C(0xff171817));const float sc=scale();
-    juce::ColourGradient face(C(0xff55534c),0,0,C(0xff202221),0,(float)getHeight(),false);g.setGradientFill(face);g.fillAll();
+    const float sc=scale();
+    JerzyAudioUI::paintChassis(g,getLocalBounds().toFloat(),JerzyAudioUI::burgundy());
     g.setColour(C(0xff101211));g.fillRect(0,0,getWidth(),juce::roundToInt(69*sc));
     g.setColour(C(0xff9b845b));g.drawLine(0,69*sc,(float)getWidth(),69*sc,1.5f*sc);
     for(const auto&s:sections)drawSection(g,s);
