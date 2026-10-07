@@ -147,3 +147,6 @@ left intact. Effects are bypassed by default to preserve existing presets.
   automatable and restores a neutral octave in older project states.
 - The FX page now lays out its six modules from the live editor bounds, keeping
   the chain controls and knobs inside their cards when the plugin is resized.
+
+
+<!-- Jerzy VST GUI System CI validation -->
