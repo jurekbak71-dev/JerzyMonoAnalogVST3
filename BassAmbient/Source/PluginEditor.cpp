@@ -54,6 +54,7 @@ class BassAmbientEditor::Control final : public juce::Component {
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> choiceAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment;
     std::unique_ptr<juce::ParameterAttachment> familyAttachment, detailAttachment;
+    int familyValue=0, detailValue=0;
 public:
     Control(BassAmbientProcessor& p,const ParameterSpec& s,int section):spec(s) {
         slider.setColour(juce::Slider::rotarySliderFillColourId,sectionColour(section));
@@ -72,13 +73,17 @@ public:
             addAndMakeVisible(choice);
             const auto familyId=s.id;
             const juce::String detailId=instrument?"model":"style";
-            auto sync=[this,&p,instrument,familyId,detailId](float) {
-                const int family=int(p.state.getRawParameterValue(familyId)->load());
-                const int detail=int(p.state.getRawParameterValue(detailId)->load());
-                choice.setSelectedId(family==0?detail+1:(instrument?4:family+5),juce::dontSendNotification);
+            familyValue=int(p.state.getRawParameterValue(familyId)->load());
+            detailValue=int(p.state.getRawParameterValue(detailId)->load());
+            auto sync=[this,instrument] {
+                choice.setSelectedId(familyValue==0?detailValue+1:(instrument?4:familyValue+5),juce::dontSendNotification);
             };
-            familyAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(familyId),sync);
-            detailAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(detailId),sync);
+            // Use callback values: APVTS raw atomics can still contain the previous
+            // value while synchronous parameter listeners are being notified.
+            familyAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(familyId),
+                [this,sync](float value){familyValue=int(value);sync();});
+            detailAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(detailId),
+                [this,sync](float value){detailValue=int(value);sync();});
             choice.onChange=[this,instrument] {
                 const int selected=choice.getSelectedId()-1;
                 if(selected<0)return;
@@ -89,6 +94,7 @@ public:
                 } else familyAttachment->setValueAsCompleteGesture(float(instrument?1:selected-4));
             };
             familyAttachment->sendInitialUpdate();
+            detailAttachment->sendInitialUpdate();
         } else if(s.kind==3) {
             choice.addItemList(s.choices,1);addAndMakeVisible(choice);
             choiceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,s.id,choice);
