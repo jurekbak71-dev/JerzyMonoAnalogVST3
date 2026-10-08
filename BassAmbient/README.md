@@ -1,6 +1,10 @@
-# Jerzy Bass Ambient 0.3.1 — Windows x64 VST3 + Standalone
+# Jerzy Bass Ambient 0.3.2 — Windows x64 VST3 + Standalone
 
 Instrument generatywny sterowany nutami z Piano Roll. BASS, AMBIENT i trzy osobne racki BASS / AMBIENT / MASTER. Identyfikator VST3 pozostaje ten sam co w 0.2.0.
+
+## Wybór instrumentu i stylu w 0.3.2
+
+BASS / SOUND → Bass instrument: ACID 303, SUB 808, Classic Analog, Bass guitar. BASS / PHRASE → Bass style: Italo Disco, Disco Polo, ACID, Funky, Techno, Rock, Post-punk, 808 / Trap. Pełne listy zastępują rozdzielone selektory. Dotychczasowe identyfikatory i zakresy automatyki oraz zapisane presety i projekty pozostają zgodne. Numer wersji w oknie odpowiada teraz paczce.
 
 ## Optymalizacja 0.3.1
 
@@ -48,7 +52,7 @@ SAVE MIDI / SAVE WAV eksportuje ostatnie 16 ćwierćnut, maksymalnie 30 sekund. 
 
 BASS jest bursztynowy, AMBIENT turkusowy, FX fioletowy. Trzy główne strony, podsekcje, wektorowe gałki z cieniowaniem i pionowe przewijanie zachowują czytelność od 840 x 600. Kontrolki i racki obsługują automatykę hosta. Zapis schematów 1/2 jest migrowany do nowych ustawień.
 
-Stare listy Synth model i Classic style zachowują pozycje oraz zakres automatyki z 0.2.0. Nowe wybory mają osobne parametry: Bass instrument przełącza syntezator/gitarę, a Style family wybiera style klasyczne / Rock / Post-punk / 808-Trap. Przy wyborze gitary lista modelu syntezatora jest nieaktywna; podobnie Classic style poza rodziną klasyczną.
+Parametry hosta Synth model, Classic style, Bass instrument i Style family zachowują pozycje i zakresy automatyki. GUI łączy je w dwie pełne listy; ich wybór aktualizuje odpowiednie parametry hosta. Gitara i styl są niezależne.
 
 Testy automatyczne obejmują DSP, pamięć, MIDI, trzy racki, migrację, odsłuch, sceny, eksport i obrazy GUI. Nie zastępują odsłuchu ani testu we właściwym FL Studio. W tej sesji nie przeprowadzono testu w rzeczywistym FL Studio. Jeżeli host usypia wtyczkę podczas odsłuchu przy zatrzymanym transporcie, wyłącz Smart Disable dla tej instancji.
 

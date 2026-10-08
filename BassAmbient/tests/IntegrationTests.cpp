@@ -147,6 +147,51 @@ int main() {
             }
             snapshot("AMBIENT-"+name+"-840");
         }
+        // Complete instrument/style menus must be visible and bind both legacy host parameters.
+        editor->setSize(840,600);tab("BASS");page=viewport->getViewedComponent();
+        auto section=[&](const juce::String& name) {
+            for(int i=0;i<page->getNumChildComponents();++i)
+                if(auto* button=dynamic_cast<juce::TextButton*>(page->getChildComponent(i)))
+                    if(button->getButtonText()==name) {button->onClick();return;}
+            throw std::runtime_error("bass section missing");
+        };
+        auto menu=[&](const juce::String& id) -> juce::ComboBox* {
+            for(int i=0;i<page->getNumChildComponents();++i) {
+                auto* control=page->getChildComponent(i);
+                if(control->getComponentID()!=id)continue;
+                require(control->isVisible()&&control->isEnabled(),"bass selector accessible");
+                require(viewport->getViewArea().contains(control->getBounds()),"bass selector visible without scrolling");
+                for(int j=0;j<control->getNumChildComponents();++j)
+                    if(auto* combo=dynamic_cast<juce::ComboBox*>(control->getChildComponent(j)))return combo;
+            }
+            throw std::runtime_error("bass selector missing");
+        };
+        section("SOUND");auto* instrumentMenu=menu("source");
+        require(instrumentMenu->getNumItems()==4&&instrumentMenu->getItemText(3)=="Bass guitar","guitar in full instrument menu");
+        for(int id: {4,1,2,3,4}) {
+            instrumentMenu->setSelectedId(id,juce::sendNotificationSync);
+            auto p=processor.readParameters();
+            require(p.source==(id==4?1:0)&&(id==4||p.model==id-1),"instrument menu updates host parameters");
+            require(instrumentMenu->getSelectedId()==id,"instrument display matches selection");
+        }
+        processor.applyPreset(6);require(instrumentMenu->getSelectedId()==4,"Rock Pick Bass selects guitar in GUI");
+        snapshot("BASS-GUITAR-840");
+        section("PHRASE");auto* styleMenu=menu("styleFamily");
+        require(styleMenu->getNumItems()==8&&styleMenu->getItemText(5)=="Rock"&&styleMenu->getItemText(6)=="Post-punk","all eight styles available");
+        for(int id: {6,7,8,1,2,3,4,5,6}) {
+            styleMenu->setSelectedId(id,juce::sendNotificationSync);auto p=processor.readParameters();
+            require(p.styleFamily==(id<=5?0:id-5)&&(id>5||p.style==id-1),"style menu updates host parameters");
+            require(p.source==1&&styleMenu->getSelectedId()==id,"style independent from guitar selection");
+        }
+        snapshot("BASS-ROCK-840");
+        processor.getStateInformation(state);processor.applyPreset(0);
+        require(instrumentMenu->getSelectedId()==3&&styleMenu->getSelectedId()==1,"factory preset synchronises both menus");
+        processor.setStateInformation(state.getData(),int(state.getSize()));
+        require(instrumentMenu->getSelectedId()==4&&styleMenu->getSelectedId()==6,"project restores guitar and Rock menus");
+        set("source",0);set("model",1);set("styleFamily",0);set("style",4);
+        require(instrumentMenu->getSelectedId()==2&&styleMenu->getSelectedId()==5,"legacy automation synchronises unified menus");
+        processor.applyPreset(7);
+        require(instrumentMenu->getSelectedId()==4&&styleMenu->getSelectedId()==7,"Gothic Bass recalls guitar and Post-punk");
         // Identical timeline at different host block sizes produces identical audio.
         auto render=[](int blockSize) {
             auto synth=std::make_unique<BassAmbientProcessor>();Host timeline;synth->setPlayHead(&timeline);

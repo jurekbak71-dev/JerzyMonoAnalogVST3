@@ -38,11 +38,11 @@ jobs:
           if (-not $standalone) { throw "Standalone not found" }
           Copy-Item $standalone.FullName artifact/
           Copy-Item BassAmbient/README.md artifact/README.md
-          Compress-Archive -Path artifact/* -DestinationPath Jerzy-Bass-Ambient-0.3.1-Windows-x64.zip
+          Compress-Archive -Path artifact/* -DestinationPath Jerzy-Bass-Ambient-0.3.2-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: Jerzy-Bass-Ambient-Windows-x64-VST3
-          path: Jerzy-Bass-Ambient-0.3.1-Windows-x64.zip
+          path: Jerzy-Bass-Ambient-0.3.2-Windows-x64.zip
           if-no-files-found: error
           retention-days: 90
       - name: Upload GUI verification images

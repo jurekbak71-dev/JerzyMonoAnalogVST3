@@ -53,6 +53,7 @@ class BassAmbientEditor::Control final : public juce::Component {
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> choiceAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toggleAttachment;
+    std::unique_ptr<juce::ParameterAttachment> familyAttachment, detailAttachment;
 public:
     Control(BassAmbientProcessor& p,const ParameterSpec& s,int section):spec(s) {
         slider.setColour(juce::Slider::rotarySliderFillColourId,sectionColour(section));
@@ -61,6 +62,33 @@ public:
         if(s.kind==1) {
             toggle.setButtonText("ON");addAndMakeVisible(toggle);
             toggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,s.id,toggle);
+        } else if(s.kind==3 && (s.id=="source" || s.id=="styleFamily")) {
+            // One complete menu; retain the original host IDs and automation ranges.
+            const bool instrument=s.id=="source";
+            label.setText(instrument?"Bass instrument":"Bass style",juce::dontSendNotification);
+            choice.addItemList(instrument
+                ? juce::StringArray{"ACID 303","SUB 808","Classic Analog","Bass guitar"}
+                : juce::StringArray{"Italo Disco","Disco Polo","ACID","Funky","Techno","Rock","Post-punk","808 / Trap"},1);
+            addAndMakeVisible(choice);
+            const auto familyId=s.id;
+            const juce::String detailId=instrument?"model":"style";
+            auto sync=[this,&p,instrument,familyId,detailId](float) {
+                const int family=int(p.state.getRawParameterValue(familyId)->load());
+                const int detail=int(p.state.getRawParameterValue(detailId)->load());
+                choice.setSelectedId(family==0?detail+1:(instrument?4:family+5),juce::dontSendNotification);
+            };
+            familyAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(familyId),sync);
+            detailAttachment=std::make_unique<juce::ParameterAttachment>(*p.state.getParameter(detailId),sync);
+            choice.onChange=[this,instrument] {
+                const int selected=choice.getSelectedId()-1;
+                if(selected<0)return;
+                const int legacyCount=instrument?3:5;
+                if(selected<legacyCount) {
+                    detailAttachment->setValueAsCompleteGesture(float(selected));
+                    familyAttachment->setValueAsCompleteGesture(0);
+                } else familyAttachment->setValueAsCompleteGesture(float(instrument?1:selected-4));
+            };
+            familyAttachment->sendInitialUpdate();
         } else if(s.kind==3) {
             choice.addItemList(s.choices,1);addAndMakeVisible(choice);
             choiceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,s.id,choice);
@@ -160,6 +188,7 @@ public:
                 include|=spec.id==(index==2?"bassFX":index==3?"padFX":"masterFX");
                 if(index==4) include|=spec.id=="master"||spec.id=="limiter";
             }
+            if(index==0 && (spec.id=="model" || spec.id=="style")) include=false;
             if(!include) continue;
 
             auto control=std::make_unique<Control>(processor,spec,index==0?0:index==1?1:2);
@@ -285,7 +314,7 @@ void BassAmbientEditor::paint(juce::Graphics& g) {
     g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
     g.drawText("JERZY / BASS AMBIENT",20,10,300,35,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12)));
-    g.drawText("0.3.0  |  GENERATIVE INSTRUMENT",22,44,300,20,juce::Justification::centredLeft);
+    g.drawText(juce::String(JucePlugin_VersionString)+"  |  GENERATIVE INSTRUMENT",22,44,300,20,juce::Justification::centredLeft);
 }
 void BassAmbientEditor::resized() {
     int right=getWidth()-20;
