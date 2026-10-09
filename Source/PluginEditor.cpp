@@ -605,7 +605,7 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
         label("VOICE MODE",350,530,220);label("AUDIO INPUT",625,530,135);label("INPUT ENVELOPE",775,530,245);label("INPUT GAIN",1040,540,350);
         label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,169,110);label("PULSE WIDTH",175,169,130);
         label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,110);label("DETUNE",475,169,130);
-        label("WAVE",615,112,185);label("SUB LEVEL",625,169,90);label("NOISE",725,169,90);
+        label("WAVE",645,112,180);label("SUB LEVEL",655,169,80);label("NOISE",745,169,80);
         label("MIX DRIVE",860,169,115);label("DRIFT",1000,169,115);
         label("OUT DRIVE",1175,169,115);label("MASTER",1300,169,115);
         label("GLIDE",40,416,110);label("MODE",190,416,130);label("NOTE PRIORITY",350,416,150);label("LEGATO",520,416,120);label("RETRIGGER",660,416,130);
@@ -626,8 +626,8 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
     }else if(modulePage==3){
         label("MODE",30,112,135);label("BANK",175,112,110);label("PATTERN LENGTH",295,112,190);label("CLOCK DIVISION",495,112,180);label("SCALE",685,112,190);label("ROOT NOTE",885,112,150);label("DIRECTION",1045,112,175);label("OCTAVE",1230,112,165);
         label("PLAY",155,174,130);label("MIDI TRIGGER",300,174,145);label("HOST SYNC",460,174,140);label("CLEAR",615,174,120);label("GRID → ARP",750,174,160);
-        label("LENGTH: OSC1 0=BANK CHAIN",870,252,465);
-        label("VELOCITY",865,310,145);label("SWING",1030,310,145);label("PROBABILITY",1190,310,175);
+        label("LENGTH: OSC1 0=BANK CHAIN",870,275,465);
+        label("VELOCITY",865,335,145);label("SWING",1030,335,145);label("PROBABILITY",1190,335,175);
         label("LEGACY GATE",865,495,110);label("RATCHET",1000,495,140);label("NOTE GATE 1-16",1190,495,140);
     }else if(modulePage==4){
         label("RUN",35,115,130);label("HOST SYNC",180,115,150);label("LATCH",345,115,130);label("RETRIGGER",490,115,145);label("GRID → ARP",650,115,165);
@@ -654,7 +654,7 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
         place(audioInGate,775,550,245,36);place(audioInGain,1040,560,350,36);
         place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,35,190,120,126);place(pulseWidth,180,190,120,126);
         place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,335,190,120,126);place(detune,480,190,120,126);
-        place(subWave,615,130,185,32);place(subLevel,625,190,90,126);place(noiseLevel,725,190,90,126);
+        place(subWave,645,130,180,32);place(subLevel,655,190,80,126);place(noiseLevel,745,190,80,126);
         place(mixDrive,860,190,115,126);place(drift,1000,190,115,126);
         place(outDrive,1175,190,115,126);place(master,1300,190,115,126);
         place(glide,35,465,110,130);place(glideMode,185,470,135,35);place(priority,345,470,150,35);place(legato,525,470,125,35);place(retrigger,675,470,135,35);place(outputMeter,900,490,450,36);
@@ -674,9 +674,9 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
         place(gridModeButton,30,132,135,32);place(gridBankBox,175,132,110,32);place(gridBanks,295,132,190,32);place(gridDivision,495,132,180,32);place(gridScale,685,132,190,32);place(gridRoot,885,132,150,32);place(gridDirection,1045,132,175,32);place(gridOctave,1230,132,165,32);
         place(gridSeqOn,155,196,130,30);place(gridMidiTrigger,300,196,145,30);place(gridHostSync,460,196,140,30);place(gridClearButton,615,196,120,30);place(gridToArp,750,196,160,30);
         place(padGrid,30,275,795,395);
-        place(gridVelocity,870,335,135,140);place(gridSwing,1035,335,135,140);place(gridProbability,1200,335,135,140);
+        place(gridVelocity,870,360,135,125);place(gridSwing,1035,360,135,125);place(gridProbability,1200,360,135,125);
         place(gridTrackBox,940,190,205,32);place(grid2On,1160,190,215,32);
-        place(gridExactLength,870,272,465,30);
+        place(gridExactLength,870,298,465,30);
         place(gridGate,870,520,110,110);place(gridRatchet,1000,530,140,36);
         place(stepGate,1190,505,140,125);place(stepGateLabel,1160,635,225,35);
         place(gridNoteGate,990,600,180,35);
@@ -740,6 +740,7 @@ void JerzyMonoAnalogAudioProcessorEditor::updateGridControls()
 void JerzyMonoAnalogAudioProcessorEditor::attachGridTrack()
 {
     const int track=proc.getGridTrack(),step=proc.getSelectedGridStep();
+    gridTrackBox.setSelectedItemIndex(track,juce::dontSendNotification);
     if(track==attachedGridTrack && step==attachedGridStep)return;
     if(track!=attachedGridTrack) {
         gridDivisionA.reset();gridDirectionA.reset();gridSwingA.reset();gridLengthA.reset();
@@ -762,6 +763,7 @@ void JerzyMonoAnalogAudioProcessorEditor::timerCallback()
     gridSwing.setEnabled(proc.getGridMode()!=JerzyMonoAnalogAudioProcessor::GridMode::launch);
     if(padsPage)
     {
+        updateGridControls();
         int activeBanks=8;
         if(auto* p=dynamic_cast<juce::AudioParameterChoice*>(proc.apvts.getParameter("gridBanks")))
             activeBanks=1+p->getIndex();
