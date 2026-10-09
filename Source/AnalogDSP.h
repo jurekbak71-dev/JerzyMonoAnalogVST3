@@ -200,15 +200,24 @@ private:
 class AnalogLFO
 {
 public:
-    enum class Wave { sine, triangle, saw, square, sampleHold };
+    enum class Wave { sine, triangle, saw, square, sampleHold, randomSquare };
     void prepare(double fs, uint32_t seed)
     {
         sampleRate = fs; rng.seed(seed); reset();
     }
-    void reset() { phase = 0.0; sh = random(); }
+    void reset() { phase = 0.0; sh = random(); randomLeft = 0.0; randomLevel = 1.0; }
     void set(double hz, Wave w) { freq = juce::jlimit(0.01, 40.0, hz); wave = w; }
     double process()
     {
+        if (wave == Wave::randomSquare)
+        {
+            if (randomLeft <= 0.0) {
+                randomLevel = -randomLevel;
+                randomLeft = sampleRate / freq * (0.1 + 1.4 * (random() + 1.0) * 0.5);
+            }
+            randomLeft -= 1.0;
+            return randomLevel;
+        }
         double y = 0.0;
         switch (wave)
         {
@@ -217,6 +226,7 @@ public:
             case Wave::saw: y = 2.0 * phase - 1.0; break;
             case Wave::square: y = phase < 0.5 ? 1.0 : -1.0; break;
             case Wave::sampleHold: y = sh; break;
+            case Wave::randomSquare: break;
         }
         const double old = phase;
         phase += freq / sampleRate;
@@ -227,6 +237,7 @@ public:
 private:
     double random() { return dist(rng); }
     double sampleRate = 44100.0, freq = 2.0, phase = 0.0, sh = 0.0;
+    double randomLeft = 0.0, randomLevel = 1.0;
     Wave wave = Wave::sine;
     std::mt19937 rng;
     std::uniform_real_distribution<double> dist {-1.0, 1.0};
@@ -457,6 +468,7 @@ struct MonoParameters
     double ampAttack = 0.005, ampDecay = 0.18, ampSustain = 0.75, ampRelease = 0.22;
     FilterMode filterMode = FilterMode::ladder24;
     double modEnvPitch = 0.0, modEnvPWM = 0.0;
+    bool externalOpen = false, externalProcessing = false;
     double modEnvOsc2Pitch = 0.0, modEnvResonance = 0.0;
     double modEnvMixDrive = 0.0, modEnvAmp = 0.0;
     double filterAttack = 0.002, filterDecay = 0.22, filterSustain = 0.2, filterRelease = 0.18;
@@ -504,6 +516,7 @@ public:
         multimode.reset();
         filterWeights.fill(0.0); filterWeights[static_cast<size_t>(params.filterMode)] = 1.0;
         lastOutput = 0.0; lfoFadeValue = 1.0;
+        paraMode=false;paraNotes.fill(-1);paraGain.fill(0.0);externalSample=0.0;externalVcaGain=0.0;
     }
 
     void setParameters(const MonoParameters& p)
@@ -559,8 +572,26 @@ public:
         }
     }
 
-    float processSample()
+    bool isActive() const noexcept { return ampEnv.isActive() || std::abs(lastOutput) > 1.0e-8; }
+    void oscillatorNoteOn(int track, int note, float velocity)
     {
+        track = juce::jlimit(0,1,track);
+        const bool held = paraNotes[0] >= 0 || paraNotes[1] >= 0;
+        paraMode = true; paraNotes[(size_t)track] = note;
+        paraTarget[(size_t)track] = note;
+        if (!held || params.glideSeconds <= 0.0) paraPitch[(size_t)track] = note;
+        if (!held || params.retrigger || !params.legato) { ampEnv.noteOn(); filterEnv.noteOn(); }
+        velocityGain = velocity; currentMidi = paraPitch[0];
+    }
+    void oscillatorNoteOff(int track)
+    {
+        paraNotes[(size_t)juce::jlimit(0,1,track)] = -1;
+        if (paraNotes[0] < 0 && paraNotes[1] < 0) { ampEnv.noteOff(); filterEnv.noteOff(); }
+    }
+
+    float processSample(float external = 0.0f)
+    {
+        externalSample = external;
         double aOut = 0.0, bOut = lastOutput;
         for (int i = 0; i < osFactor; ++i)
         {
@@ -626,6 +657,14 @@ private:
             currentMidi += (targetMidi - currentMidi) * a;
         }
         else currentMidi = targetMidi;
+        if (paraMode) {
+            for (size_t i=0;i<2;++i) {
+                const double glide = p.glideSeconds > 0.0 ? 1.0-std::exp(-1.0/(p.glideSeconds*sampleRate)) : 1.0;
+                paraPitch[i] += (paraTarget[i]-paraPitch[i])*glide;
+                paraGain[i] += smoothingCoefficient*((paraNotes[i]>=0?1.0:0.0)-paraGain[i]);
+            }
+            currentMidi = paraPitch[0];
+        }
 
         lfo.set(p.lfoRate, p.lfoWave);
         const double l = lfo.process();
@@ -646,16 +685,16 @@ private:
         osc2.setDriftCents(p.analogDriftCents * 1.13);
         sub.setDriftCents(0.0);
         osc1.setFrequency(baseHz * std::pow(2.0, p.osc1Octave));
-        osc2.setFrequency(baseHz * std::pow(2.0, p.osc2Octave + p.osc2DetuneCents / 1200.0 + fe * p.modEnvOsc2Pitch / 12.0));
+        osc2.setFrequency(baseHz * std::pow(2.0, p.osc2Octave + p.osc2DetuneCents / 1200.0 + fe * p.modEnvOsc2Pitch / 12.0 + (paraMode ? (paraPitch[1]-paraPitch[0])/12.0 : 0.0)));
         sub.setFrequency(baseHz * std::pow(2.0, p.osc1Octave - 1));
 
         const double n = noiseDist(noiseRng);
         const double vco1 = osc1.process();
         sub.setFrequency(osc1.getLastFrequency() * 0.5);
-        double mix = p.osc1Level * vco1
-                   + p.osc2Level * osc2.process()
-                   + p.subLevel  * sub.process()
-                   + p.noiseLevel * n;
+        double mix = p.osc1Level * vco1 * (paraMode?paraGain[0]:1.0)
+                   + p.osc2Level * osc2.process() * (paraMode?paraGain[1]:1.0)
+                   + p.subLevel  * sub.process() * (paraMode?paraGain[0]:1.0)
+                   + p.noiseLevel * n + externalSample;
 
         // Mixer drive is a real pre-filter gain stage. Blend from clean at zero
         // to progressively harder transistor clipping without compensating away
@@ -682,7 +721,8 @@ private:
         }
 
         const double tremolo = 1.0 - p.lfoAmp * 0.5 * (lf + 1.0);
-        const double vca = y * ae * velocityGain * tremolo * juce::jlimit(0.0, 2.0, 1.0 + fe * p.modEnvAmp);
+        externalVcaGain += smoothingCoefficient*((p.externalOpen?1.0:ae*velocityGain)-externalVcaGain);
+        const double vca = y * (p.externalProcessing?externalVcaGain:ae*velocityGain) * tremolo * juce::jlimit(0.0, 2.0, 1.0 + fe * p.modEnvAmp);
         const double vcaBiased = vca + 0.012 * vca * vca;
         y = saturateAsymmetric(vcaBiased * 1.28) / 1.12;
 
@@ -714,9 +754,14 @@ private:
     int currentNote = -1;
     double targetMidi = 60.0, currentMidi = 60.0, velocityGain = 1.0, lastOutput = 0.0;
     double lfoFadeValue = 1.0;
+    bool paraMode = false;
+    std::array<int,2> paraNotes {-1,-1};
+    std::array<double,2> paraTarget {60,60}, paraPitch {60,60}, paraGain {0,0};
+    double externalSample = 0.0, externalVcaGain = 0.0;
     std::mt19937 noiseRng;
     std::mt19937 keyRng;
     std::uniform_real_distribution<double> noiseDist {-1.0, 1.0};
 };
 
 } // namespace jerzy
+

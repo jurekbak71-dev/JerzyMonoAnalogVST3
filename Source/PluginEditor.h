@@ -113,6 +113,7 @@ private:
     void drawEnvelope(juce::Graphics&,juce::Rectangle<float>,bool) const;
     void setMainPage(int page);
     void updateGridControls();
+    void attachGridTrack();
     float scale() const noexcept {return getWidth()/1440.0f;}
     float topHeight() const noexcept {return 720.0f*scale();}
 
@@ -126,6 +127,14 @@ private:
     juce::TextButton gridModeButton,gridClearButton;
     juce::ComboBox gridBankBox,gridDivision,gridRoot,gridScale,gridBanks,gridDirection,gridOctave;
     ResetSlider gridGate,gridSwing,gridVelocity,gridProbability;
+    ResetSlider stepGate,gridExactLength,lfoGate,audioInGain;
+    juce::ComboBox gridTrackBox,voiceModeBox,audioInGate;
+    juce::ToggleButton audioInOn,grid2On,gridNoteGate;
+    juce::Label stepGateLabel;
+    std::unique_ptr<SliderAttachment> stepGateA,gridLengthA,lfoGateA,audioInGainA;
+    std::unique_ptr<ComboAttachment> voiceModeA,audioInGateA;
+    std::unique_ptr<ButtonAttachment> audioInOnA,grid2OnA,gridNoteGateA;
+    int attachedGridTrack=-1,attachedGridStep=-1;
     juce::ComboBox gridRatchet;
     PadGrid padGrid;
     MonoFxPanel fxPanel;
@@ -167,3 +176,4 @@ private:
     bool fxPage=false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessorEditor)
 };
+

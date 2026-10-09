@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(JerzyMonoAnalog VERSION 0.10.0 LANGUAGES C CXX)
+project(JerzyMonoAnalog VERSION 0.11.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -76,4 +76,11 @@ if(BUILD_TESTING)
     target_include_directories(MonoProcessorTests PRIVATE Source)
     target_link_libraries(MonoProcessorTests PRIVATE JerzyMonoAnalog juce::juce_audio_utils)
     add_test(NAME MonoProcessor COMMAND MonoProcessorTests)
+    juce_add_console_app(MonoExpansionTests PRODUCT_NAME "Mono Expansion Tests")
+    juce_generate_juce_header(MonoExpansionTests)
+    target_sources(MonoExpansionTests PRIVATE tests/ExpansionTests.cpp)
+    target_include_directories(MonoExpansionTests PRIVATE Source)
+    target_link_libraries(MonoExpansionTests PRIVATE JerzyMonoAnalog juce::juce_audio_utils)
+    add_test(NAME MonoExpansion COMMAND MonoExpansionTests)
 endif()
+

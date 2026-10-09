@@ -37,6 +37,7 @@ int main()
         set(p,"arpVelocity",0.8f);
         set(p,"gridDivision",5.0f);
         set(p,"gridGate",0.05f);
+        set(p,"gridNoteGate",0.0f); // Explicit legacy percent-gate regression.
         p.setGridStep(0,0,7,true);
         auto events=render(p,512);
         int ons=0,offs=0;
@@ -95,3 +96,4 @@ int main()
         return 1;
     }
 }
+

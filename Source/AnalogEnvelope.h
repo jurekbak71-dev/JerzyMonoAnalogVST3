@@ -31,6 +31,7 @@ public:
         }
     }
     void noteOn() { begin(Stage::attack, attack, 1.0); }
+    bool isActive() const noexcept { return stage != Stage::idle; }
     void noteOff() { if (stage != Stage::idle && stage != Stage::release) begin(Stage::release, release, 0.0); }
     double process()
     {
@@ -65,3 +66,4 @@ private:
     double value = 0.0, target = 0.0, endpoint = 0.0, multiplier = 0.0;
 };
 }
+

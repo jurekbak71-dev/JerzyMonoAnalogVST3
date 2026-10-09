@@ -1,5 +1,17 @@
 # Jerzy Mono Analog Grid — VST3
 
+## Wersja 0.11.0
+
+- **OSC / MIX → Mono / Paraphonic / Poly 6**: domyślnie mono, opcjonalnie dwa niezależne oscylatory ze wspólnym filtrem/obwiedniami albo sześć pełnych głosów.
+- **GRID → OSC 1 GRID / OSC 2 GRID**: dwie pamięci nut, niezależne długości, podziały (również triole), kierunki i swing. OSC 2 gra w parafonii i polifonii.
+- **NOTE GATE 1-16**: kliknij pad, aby wybrać nutę; prawy klik wybiera bez usuwania. NOTE GATE ustawia jej długość w krokach. Pauzy nie skracają nuty; kolejna nuta na tym samym torze ją zastępuje. Starsze presety zachowują procentowy gate, dopóki nie włączysz NOTE GATE.
+- Długość toru można skrócić do **1 kroku**. Długość OSC 1 równa 0 korzysta ze starego łańcucha banków.
+- **MOD → Random Square**: nieregularny przebieg prostokątny. **LFO > GATE** moduluje długość nut do ±15 kroków, z ograniczeniem wyniku do 1–16.
+- **AUDIO IN**: host-routed stereo przez analogowy drive, filtry, modulacje i wspólny łańcuch FX. OPEN działa bez MIDI; MIDI / GRID GATE korzysta z obwiedni. Wejście domyślnie wyłączone; źródło wskazujesz w Wrapper → Processing → Connections / Patcher.
+- Każdy potencjometr i suwak ma reset prawym kliknięciem do wartości neutralnej. Zachowane parametry, efekty, GRID → ARP i burgundowy wygląd.
+
+Szczegóły: [CHANGELOG 0.11](CHANGELOG_0.11.0.md). To nadal VST3, nie własny format natywny FL Studio. Interaktywny routing w FL wymaga testu na komputerze z hostem.
+
 Samodzielny monofoniczny syntezator analog-modeling VST3/Standalone oparty na JUCE.
 
 ## Funkcje
@@ -176,3 +188,4 @@ left intact. Effects are bypassed by default to preserve existing presets.
   saved with the project, and default to zero in older presets.
 - Values display percentages, milliseconds, semitones, dB or frequency where
   appropriate. The clock and modulation paths have regression coverage.
+

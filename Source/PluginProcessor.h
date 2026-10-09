@@ -1,6 +1,8 @@
 #pragma once
 #include <JuceHeader.h>
 #include "AnalogDSP.h"
+#include "VoiceEngine.h"
+#include "GridClock.h"
 #include "MonoFxChain.h"
 
 class JerzyMonoAnalogAudioProcessor : public juce::AudioProcessor
@@ -43,7 +45,13 @@ public:
     void clearGridBank(int bank);
     void launchPadNoteOn(int padIndex);
     void launchPadNoteOff(int padIndex);
-    int getGridPlayColumn() const noexcept { return gridPlayColumn.load(); }
+    int getGridPlayColumn() const noexcept { return playColumns[(size_t)gridTrack.load()].load(); }
+    int getGridPlayBank() const noexcept { return playBanks[(size_t)gridTrack.load()].load(); }
+    void setGridTrack(int track) noexcept { gridTrack.store(juce::jlimit(0,1,track)); }
+    int getGridTrack() const noexcept { return gridTrack.load(); }
+    void selectGridStep(int step) noexcept { selectedGridStep.store(juce::jlimit(0,63,step)); }
+    int getSelectedGridStep() const noexcept { return selectedGridStep.load(); }
+    int getGridStepGate(int bank,int column) const;
     int getGridRootNote() const noexcept { return gridRootNote.load(); }
     int getGridRowNote(int row) const { return gridNoteForRow(row); }
     void setGridRootNote(int n) noexcept { gridRootNote.store(juce::jlimit(24,84,n)); }
@@ -61,7 +69,7 @@ private:
     int gridNoteForRow(int row) const;
     int gridRootMidiFromChoice() const;
     bool isGridMidiRunning() const noexcept { return gridMidiRunning.load(); }
-    jerzy::MonoAnalogEngine engine;
+    jerzy::VoiceEngine engine;
     MonoFxChain fxChain;
     juce::MidiBuffer inputMidiScratch, generatedMidiScratch;
     std::atomic<float> outputMeter { 0.0f };
@@ -96,6 +104,7 @@ private:
     int gridCurrentNote = -1;
     bool gridCurrentNoteRouted = false;
     int gridArpNote = -1;
+    int gridArpNote2 = -1;
     int launchCurrentNote = -1;
     bool launchCurrentNoteRouted = false;
     int launchArpNote = -1;
@@ -103,7 +112,7 @@ private:
     double arpGridPpqOrigin = 0.0;
     struct GridSettings
     {
-        bool armed = false, midiTrigger = false, hostSync = false, routeToArp = false;
+        bool armed = false, midiTrigger = false, hostSync = false, routeToArp = false, noteGate = true;
         int totalSteps = 8, division = 0, ratchets = 1, direction = 0;
         double swing = 0.0, gate = 0.75;
         float velocity = 0.95f, probability = 1.0f;
@@ -112,5 +121,22 @@ private:
     int gridRatchetIndex = 0;
     int gridStepNote = -1;
     bool gridStepActive = false;
+    std::atomic<int> gridTrack {0}, selectedGridStep {0};
+    std::array<std::atomic<int>,2> playColumns {{{-1},{-1}}}, playBanks {{{-1},{-1}}};
+    std::array<std::atomic<uint8_t>,512> gridPattern2 {};
+    std::array<std::array<std::atomic<float>*,64>,2> stepGateParameters {};
+    struct TrackState {
+        int lastStep=-1,note=-1,stepNote=-1,ratchet=-1,division=4,length=64,direction=0;
+        double beat=0,endBeat=0,swing=0;
+        bool routed=false,enabled=true;
+    };
+    std::array<TrackState,2> tracks;
+    jerzy::AnalogLFO gateLfo;
+    double gateModulation=0, gateModDepth=0, previousPpq=0;
+    bool previousHostPlaying=false;
+    int voiceMode=0;
+    void stopTrack(int track,int offset,juce::MidiBuffer& midi);
+    std::atomic<bool> restoredState {false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyMonoAnalogAudioProcessor)
 };
+
