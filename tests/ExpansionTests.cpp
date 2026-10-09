@@ -9,7 +9,10 @@ struct Host:juce::AudioPlayHead {
 };
 int main(){try{
     // Six independent voices and bounded stealing; release of a stolen key is harmless.
-    jerzy::VoiceEngine poly;poly.prepare(48000,512);poly.setMode(2);jerzy::MonoParameters patch;patch.analogDriftCents=0;poly.setParameters(patch);
+    // Heap allocation mirrors the plug-in factory; Windows console stacks are small.
+    auto polyStorage=std::make_unique<jerzy::VoiceEngine>();auto& poly=*polyStorage;
+    poly.prepare(48000,512);poly.setMode(2);jerzy::MonoParameters patch;patch.analogDriftCents=0;poly.setParameters(patch);
+    std::cerr<<"Stage: voices\n";
     for(int n=48;n<54;++n)poly.noteOn(n,1);check(poly.activeNotes()==6,"Six voices available");
     poly.noteOn(72,1);check(poly.activeNotes()==6,"Seventh note steals one voice");poly.noteOff(48);check(poly.activeNotes()==6,"Stolen key release does not silence replacement");
     for(int n=49;n<54;++n)poly.noteOff(n);poly.noteOff(72);check(poly.activeNotes()==0,"All six notes release");
@@ -21,7 +24,9 @@ int main(){try{
     for(int i=0;i<8000;++i){const float y=poly.processSample();if(i>1000 && previous<0 && y>=0)++crossings;previous=y;}check(crossings>50,"OSC2 has independent MIDI pitch, not OSC1 pitch");
     poly.setMode(2);poly.noteOn(60,1,1);poly.noteOn(60,1,2);check(poly.activeNotes()==2,"Identical pitches on separate tracks retain separate voices");poly.noteOff(60,1);check(poly.activeNotes()==1,"Track release does not silence another track's same pitch");
     // Musical gate of four steps survives three rests and releases at the exact boundary.
-    JerzyMonoAnalogAudioProcessor p;Host host;p.setPlayHead(&host);p.prepareToPlay(48000,512);
+    auto processorStorage=std::make_unique<JerzyMonoAnalogAudioProcessor>();auto& p=*processorStorage;
+    Host host;p.setPlayHead(&host);p.prepareToPlay(48000,512);
+    std::cerr<<"Stage: grids\n";
     set(p,"gridSeqOn",1);set(p,"gridLength",8);set(p,"gateT1S0",4);p.setGridStep(0,0,7,true);
     juce::AudioBuffer<float> audio(2,512);juce::MidiBuffer midi;int ons=0,offs=0;long long offSample=-1;
     for(int block=0;block<100;++block){midi.clear();p.processBlock(audio,midi);for(auto e:midi){if(e.getMessage().isNoteOn())++ons;if(e.getMessage().isNoteOff()){++offs;if(offSample<0)offSample=block*512+e.samplePosition;}}host.beat+=512*120.0/(60*48000);}
@@ -36,7 +41,9 @@ int main(){try{
     check(p.getGridPlayColumn()==-1,"Stopped OSC2 cursor");
     juce::MemoryBlock state;p.getStateInformation(state);p.clearGridBank(0);p.setStateInformation(state.getData(),(int)state.getSize());check(p.getGridStep(0,1,6),"OSC2 preset restore");check(p.getGridStepGate(0,0)==1,"Gate preset restore");
     // Stereo audio input reaches nonlinear filter and output, without MIDI in OPEN mode.
-    JerzyMonoAnalogAudioProcessor input;input.enableAllBuses();input.prepareToPlay(48000,512);set(input,"audioInOn",1);set(input,"cutoff",6000);
+    auto inputStorage=std::make_unique<JerzyMonoAnalogAudioProcessor>();auto& input=*inputStorage;
+    input.enableAllBuses();input.prepareToPlay(48000,512);set(input,"audioInOn",1);set(input,"cutoff",6000);
+    std::cerr<<"Stage: audio input\n";
     double left=0,right=0;
     for(int block=0;block<8;++block){for(int i=0;i<512;++i){audio.setSample(0,i,(float)(.3*std::sin((block*512+i)*.02)));audio.setSample(1,i,0);}midi.clear();input.processBlock(audio,midi);for(int i=0;i<512;++i){left+=std::abs(audio.getSample(0,i));right+=std::abs(audio.getSample(1,i));}}
     check(left>1 && right<1e-5,"Stereo AUDIO IN is processed without collapsing channels");
