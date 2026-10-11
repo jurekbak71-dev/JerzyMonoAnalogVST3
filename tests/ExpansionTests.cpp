@@ -47,6 +47,23 @@ int main(){try{
     double left=0,right=0;
     for(int block=0;block<8;++block){for(int i=0;i<512;++i){audio.setSample(0,i,(float)(.3*std::sin((block*512+i)*.02)));audio.setSample(1,i,0);}midi.clear();input.processBlock(audio,midi);for(int i=0;i<512;++i){left+=std::abs(audio.getSample(0,i));right+=std::abs(audio.getSample(1,i));}}
     check(left>1 && right<1e-5,"Stereo AUDIO IN is processed without collapsing channels");
+    // Exercise channel routing through the real processor MIDI event loop.
+    input.disableNonMainBuses();set(input,"audioInOn",0);set(input,"voiceMode",1);
+    set(input,"osc1Level",0);set(input,"subLevel",0);set(input,"osc2Level",1);set(input,"cutoff",18000);
+    set(input,"aA",.001f);set(input,"aD",.001f);set(input,"aS",1);set(input,"aR",.4f);
+    auto blockEnergy=[&](int channel,int note,bool on){
+        audio.clear();midi.clear();
+        if(channel>0)midi.addEvent(on?juce::MidiMessage::noteOn(channel,note,1.0f):juce::MidiMessage::noteOff(channel,note),0);
+        input.processBlock(audio,midi);double e=0;for(int i=0;i<512;++i)e+=audio.getSample(0,i)*audio.getSample(0,i);return e;
+    };
+    blockEnergy(1,69,true);double midiEnergy=0;for(int b=0;b<10;++b)midiEnergy+=blockEnergy(0,0,false);
+    check(midiEnergy<1e-7,"Processor CH1 leaves OSC2 silent");
+    blockEnergy(2,69,true);midiEnergy=0;for(int b=0;b<10;++b)midiEnergy+=blockEnergy(0,0,false);
+    check(midiEnergy>1,"Processor CH2 drives OSC2");
+    blockEnergy(1,69,false);double remaining=0;for(int b=0;b<10;++b)remaining+=blockEnergy(0,0,false);
+    check(remaining>midiEnergy*.8,"Processor identical-pitch CH1 release keeps CH2 held");
+    blockEnergy(2,69,false);for(int b=0;b<3;++b)blockEnergy(0,0,false);
+    check(blockEnergy(0,0,false)>midiEnergy*.001,"Processor paraphonic release tail remains audible");
     jerzy::AnalogLFO lfo;lfo.prepare(1000,17);lfo.set(5,jerzy::AnalogLFO::Wave::randomSquare);int transitions=0,lastLength=0;bool varied=false;double prev=lfo.process();
     for(int i=1,last=0;i<3000;++i){const auto v=lfo.process();check(v==1 || v==-1,"Random square remains bipolar");if(v!=prev){const int len=i-last;if(lastLength && len!=lastLength)varied=true;lastLength=len;last=i;++transitions;}prev=v;}
     check(transitions>5 && varied,"Random square has variable pulse lengths");

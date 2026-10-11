@@ -1,6 +1,20 @@
 # Jerzy Mono Analog Grid — VST3
 
-## Wersja 0.11.0
+## Wersja 0.11.1 — naprawa AMP w parafonii
+
+Naprawiony Release AMP: oscylatory wybrzmiewają przez obwiednię zamiast być odcinane po 3 ms. Parafonia ma wspólny filtr i AMP ADSR. Pierwsza nuta rozpoczyna Attack; ostatni note-off rozpoczyna Release. LEGATO włączone i RETRIGGER wyłączone łączą nakładające się nuty w jedną frazę. Dla ataku na każdej nucie wyłącz LEGATO lub włącz RETRIGGER.
+
+### Dwa niezależne Piano Rolle w FL Studio
+
+1. Załaduj jedną instancję syntezatora i wybierz **PARAPHONIC**. Do grania bezpośrednio z Piano Roll wyłącz **GRID SEQ ON** i **ARP ON**.
+2. W ustawieniach Wrappera syntezatora ustaw **MIDI Input port = 10** (lub inny wolny numer).
+3. Dodaj dwa kanały **MIDI Out** do Channel Rack. Oba ustaw na **Port = 10**.
+4. Pierwszy MIDI Out: **Channel = 1**, nazwa **OSC 1**. Drugi: **Channel = 2**, nazwa **OSC 2**. Wyłącz **Map note color to MIDI channel**, aby Channel decydował o routingu.
+5. Zapisuj nuty w osobnym Piano Roll każdego MIDI Out. Kanał 1 steruje wyłącznie OSC 1 i subem, kanał 2 wyłącznie OSC 2. Nuty o tej samej wysokości oraz ich note-off są niezależne. Przy nakładaniu nut każdy tor korzysta z własnych trzymanych klawiszy i wspólnego ustawienia NOTE PRIORITY. Kanały 3–16 nie sterują oscylatorami w parafonii.
+
+Dwa kanały Channel Rack sterują jedną instancją z jednym wspólnym wyjściem audio, filtrem, obwiedniami i FX. Routing zgodny z [instrukcją Image-Line MIDI Out](https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/plugins/MIDI%20Out.htm). Testy sprawdzają DSP oraz MIDI przez procesor; interaktywny test w FL Studio pozostaje do wykonania na komputerze z hostem.
+
+## Funkcje dodane w 0.11.0
 
 - **OSC / MIX → Mono / Paraphonic / Poly 6**: domyślnie mono, opcjonalnie dwa niezależne oscylatory ze wspólnym filtrem/obwiedniami albo sześć pełnych głosów.
 - **GRID → OSC 1 GRID / OSC 2 GRID**: dwie pamięci nut, niezależne długości, podziały (również triole), kierunki i swing. OSC 2 gra w parafonii i polifonii.

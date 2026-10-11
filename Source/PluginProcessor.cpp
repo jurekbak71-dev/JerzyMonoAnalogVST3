@@ -523,7 +523,7 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                     if (!arpLatchedNotes.contains(note)) arpLatchedNotes.add(note);
                     if (arpRetrig) { arpStep = 0; arpSamplesToNext = 0.0; }
                 }
-                else engine.noteOn(note, m.getFloatVelocity());
+                else engine.midiNoteOn(m.getChannel(),note,m.getFloatVelocity());
                 }
             }
             else if (m.isNoteOff())
@@ -562,9 +562,13 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
                     if (!arpLatch)
                         arpLatchedNotes.removeAllInstancesOf(note);
                 }
-                else engine.noteOff(note);
+                else engine.midiNoteOff(m.getChannel(),note);
                 }
             }
+
+            else if(m.isAllSoundOff())engine.midiAllSoundOff(m.getChannel());
+            else if(m.isAllNotesOff())
+                engine.midiAllNotesOff(m.getChannel());
 
             ++midiIt;
             hasMidi = midiIt != inputMidi.cend();

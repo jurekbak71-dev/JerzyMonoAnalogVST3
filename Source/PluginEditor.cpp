@@ -602,6 +602,9 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
     for(const auto&s:sections)drawSection(g,s);
     auto label=[&](const char*t,float x,float y,float w){drawLabelBox(g,t,x,y,w);};
     if(modulePage==0){
+        g.setColour(lcdText);g.setFont(juce::Font(juce::FontOptions("Arial",13*sc,juce::Font::plain)));
+        g.drawText("PARAPHONIC: MIDI CH 1 > OSC 1 / CH 2 > OSC 2 | Shared AMP ADSR | LEGATO off or RETRIGGER on: attack on each note",
+                   350*sc,615*sc,1040*sc,25*sc,juce::Justification::centredLeft);
         label("VOICE MODE",350,530,220);label("AUDIO INPUT",625,530,135);label("INPUT ENVELOPE",775,530,245);label("INPUT GAIN",1040,540,350);
         label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,169,110);label("PULSE WIDTH",175,169,130);
         label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,110);label("DETUNE",475,169,130);

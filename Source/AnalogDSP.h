@@ -516,7 +516,7 @@ public:
         multimode.reset();
         filterWeights.fill(0.0); filterWeights[static_cast<size_t>(params.filterMode)] = 1.0;
         lastOutput = 0.0; lfoFadeValue = 1.0;
-        paraMode=false;paraNotes.fill(-1);paraGain.fill(0.0);externalSample=0.0;externalVcaGain=0.0;
+        paraMode=false;paraNotes.fill(-1);paraGain.fill(0.0);paraReleaseGain.fill(0.0);externalSample=0.0;externalVcaGain=0.0;
     }
 
     void setParameters(const MonoParameters& p)
@@ -578,6 +578,8 @@ public:
         track = juce::jlimit(0,1,track);
         const bool held = paraNotes[0] >= 0 || paraNotes[1] >= 0;
         paraMode = true; paraNotes[(size_t)track] = note;
+        // Starting a new phrase must not bring back the other oscillator's old tail.
+        if (!held) paraGain[(size_t)(1-track)] = 0.0;
         paraTarget[(size_t)track] = note;
         if (!held || params.glideSeconds <= 0.0) paraPitch[(size_t)track] = note;
         if (!held || params.retrigger || !params.legato) { ampEnv.noteOn(); filterEnv.noteOn(); }
@@ -586,7 +588,18 @@ public:
     void oscillatorNoteOff(int track)
     {
         paraNotes[(size_t)juce::jlimit(0,1,track)] = -1;
-        if (paraNotes[0] < 0 && paraNotes[1] < 0) { ampEnv.noteOff(); filterEnv.noteOff(); }
+        if (paraNotes[0] < 0 && paraNotes[1] < 0) {
+            // Keep the sounding VCOs feeding the shared VCA during Release.
+            // The old 3 ms oscillator mute bypassed the AMP release completely.
+            paraReleaseGain = paraGain;
+            ampEnv.noteOff(); filterEnv.noteOff();
+        }
+    }
+    void oscillatorAllSoundOff(int track)
+    {
+        track=juce::jlimit(0,1,track);
+        paraNotes[(size_t)track]=-1;paraGain[(size_t)track]=paraReleaseGain[(size_t)track]=0;
+        if(paraNotes[0]<0 && paraNotes[1]<0){ampEnv.reset();filterEnv.reset();}
     }
 
     float processSample(float external = 0.0f)
@@ -661,7 +674,9 @@ private:
             for (size_t i=0;i<2;++i) {
                 const double glide = p.glideSeconds > 0.0 ? 1.0-std::exp(-1.0/(p.glideSeconds*sampleRate)) : 1.0;
                 paraPitch[i] += (paraTarget[i]-paraPitch[i])*glide;
-                paraGain[i] += smoothingCoefficient*((paraNotes[i]>=0?1.0:0.0)-paraGain[i]);
+                const bool releasing = paraNotes[0]<0 && paraNotes[1]<0;
+                const double gate = releasing ? paraReleaseGain[i] : (paraNotes[i]>=0?1.0:0.0);
+                paraGain[i] += smoothingCoefficient*(gate-paraGain[i]);
             }
             currentMidi = paraPitch[0];
         }
@@ -756,7 +771,7 @@ private:
     double lfoFadeValue = 1.0;
     bool paraMode = false;
     std::array<int,2> paraNotes {-1,-1};
-    std::array<double,2> paraTarget {60,60}, paraPitch {60,60}, paraGain {0,0};
+    std::array<double,2> paraTarget {60,60}, paraPitch {60,60}, paraGain {0,0}, paraReleaseGain {0,0};
     double externalSample = 0.0, externalVcaGain = 0.0;
     std::mt19937 noiseRng;
     std::mt19937 keyRng;
