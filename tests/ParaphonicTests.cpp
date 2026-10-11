@@ -39,6 +39,9 @@ int main(){try{
     check(crossings>=12 && crossings<=14,"OSC2 returns to its own previously held MIDI key");
     voice.midiNoteOff(1,48);check(energy(voice,4800)>second*.8,"Unrelated note-off leaves OSC2 playing");
     voice.midiAllNotesOff(2);energy(voice,9600);check(energy(voice,2400)<second*1e-5,"Channel flush releases held keys");
+    voice.midiNoteOn(2,69,1);energy(voice,4800);voice.midiNoteOff(2,69);
+    voice.midiAllSoundOff(1);check(energy(voice,960)>second*.01,"CH1 panic preserves OSC2 release tail");
+    voice.midiAllSoundOff(2);energy(voice,9600);check(energy(voice,2400)<second*1e-5,"CH2 panic cuts its own tail");
 
     // Retrigger is shared; legato is intentionally a shared-envelope phrase.
     voice.prepare(48000,512);voice.setMode(1);p.osc1Level=p.osc2Level=.5;p.ampSustain=0;

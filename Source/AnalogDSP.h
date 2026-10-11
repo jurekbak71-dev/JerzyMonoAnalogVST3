@@ -599,7 +599,7 @@ public:
     {
         track=juce::jlimit(0,1,track);
         paraNotes[(size_t)track]=-1;paraGain[(size_t)track]=paraReleaseGain[(size_t)track]=0;
-        if(paraNotes[0]<0 && paraNotes[1]<0){ampEnv.reset();filterEnv.reset();}
+        if(paraNotes[0]<0 && paraNotes[1]<0 && paraReleaseGain[0]==0 && paraReleaseGain[1]==0){ampEnv.reset();filterEnv.reset();}
     }
 
     float processSample(float external = 0.0f)
