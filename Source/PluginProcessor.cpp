@@ -273,6 +273,10 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
     juce::ScopedNoDenormals noDenormals;
     generatedMidiScratch.clear();
     // Input and output may alias: read each input sample before overwriting output.
+    // FL Studio may not supply this bus for an Instrument wrapper. The FX plugin
+    // is the host-compatible insert for processing mixer audio without Patcher.
+    // Accumulate the meter locally: one atomic write per block, not per sample.
+    float meterPeak=0.0f;
 
     jerzy::MonoParameters p;
     p.osc1Wave = waveFrom(apvts.getRawParameterValue("osc1Wave")->load());
@@ -466,10 +470,13 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
         const auto y=engine.processStereo();
         float ay=0;
         for(int ch=0;ch<getTotalNumOutputChannels();++ch){const float out=(getTotalNumOutputChannels()==1?(y[0]+y[1])*.5f:y[(size_t)ch])+engine.processInput(ch,ch==0?inputL:inputR);b.setSample(ch,s,out);ay=std::max(ay,std::abs(out));}
-        const float old = outputMeter.load();
-        outputMeter.store(ay > old ? ay : old * 0.9975f);
+        meterPeak=juce::jmax(meterPeak,ay);
     }
     fxChain.process(b,apvts,bpm);
+    // Keep meter tied to the post-FX signal while avoiding contention per sample.
+    juce::ignoreUnused(meterPeak);
+    const float postFxPeak=b.getMagnitude(0,b.getNumSamples());
+    outputMeter.store(juce::jmax(postFxPeak,outputMeter.load(std::memory_order_relaxed)*std::pow(0.9975f,(float)b.getNumSamples())),std::memory_order_relaxed);
     midi.addEvents(generatedMidi,0,b.getNumSamples(),0);
     inputMidi.clear();
 }
