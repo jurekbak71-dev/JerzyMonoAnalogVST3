@@ -472,6 +472,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupKnob(osc1Pan,"PAN OSC 1","",0.0);setupKnob(osc2Pan,"PAN OSC 2","",0.0);
     for(auto* pan:{&osc1Pan,&osc2Pan})pan->textFromValueFunction=[](double v){return std::abs(v)<0.005?juce::String("CENTER"):juce::String(v<0?"L ":"R ")+juce::String(juce::roundToInt(std::abs(v)*100));};
     for(auto* pan:{&osc1Pan,&osc2Pan})pan->valueFromTextFunction=[](const juce::String& text){auto t=text.trim().toUpperCase();if(t=="CENTER")return 0.0;return juce::jlimit(-1.0,1.0,t.retainCharacters("0123456789.-").getDoubleValue()/100.0*(t.startsWith("L")?-1.0:1.0));};
+    osc1Pan.updateText();osc2Pan.updateText();
     setupKnob(osc1Level,"LEVEL","%",0.0);setupKnob(pulseWidth,"PULSE WIDTH","%",0.5);
     setupKnob(osc2Level,"LEVEL","%",0.0);setupKnob(detune,"DETUNE","ct",0.0);
     setupKnob(subLevel,"SUB LEVEL","%",0.0);setupKnob(noiseLevel,"NOISE","%",0.0);
@@ -611,10 +612,10 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
                    350*sc,615*sc,1040*sc,25*sc,juce::Justification::centredLeft);
         g.drawText("New attack on each note: LEGATO off or RETRIGGER on. Two Piano Rolls: see README.",
                    350*sc,641*sc,1040*sc,25*sc,juce::Justification::centredLeft);
-        label("PAN OSC 1",100,292,130);label("PAN OSC 2",400,292,130);
+        label("PAN",225,169,80);label("PAN",535,169,80);
         label("VOICE MODE",350,530,220);label("AUDIO INPUT",625,530,135);label("INPUT ENVELOPE",775,530,245);label("INPUT GAIN",1040,540,350);
-        label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,169,110);label("PULSE WIDTH",175,169,130);
-        label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,110);label("DETUNE",475,169,130);
+        label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",30,169,80);label("PULSE WIDTH",115,169,110);
+        label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,80);label("DETUNE",440,169,80);
         label("WAVE",645,112,180);label("SUB LEVEL",655,169,80);label("NOISE",745,169,80);
         label("MIX DRIVE",860,169,115);label("DRIFT",1000,169,115);
         label("OUT DRIVE",1175,169,115);label("MASTER",1300,169,115);
@@ -660,11 +661,11 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
     for(int i=0;i<6;++i)place(pageButtons[(size_t)i],320+i*145,15,136,38);
     if(fxPage){place(fxPanel,15,80,1410,615);return;}
     if(modulePage==0){
-        place(osc1Pan,115,310,100,82);place(osc2Pan,415,310,100,82);
+        place(osc1Pan,225,190,80,126);place(osc2Pan,535,190,80,126);
         place(voiceModeBox,350,550,220,36);place(audioInOn,625,550,135,36);
         place(audioInGate,775,550,245,36);place(audioInGain,1040,560,350,36);
-        place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,35,190,120,100);place(pulseWidth,180,190,120,100);
-        place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,335,190,120,100);place(detune,480,190,120,100);
+        place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,30,190,80,126);place(pulseWidth,130,190,80,126);
+        place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,340,190,80,126);place(detune,440,190,80,126);
         place(subWave,645,130,180,32);place(subLevel,655,190,80,126);place(noiseLevel,745,190,80,126);
         place(mixDrive,860,190,115,126);place(drift,1000,190,115,126);
         place(outDrive,1175,190,115,126);place(master,1300,190,115,126);

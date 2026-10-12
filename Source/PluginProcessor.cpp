@@ -657,7 +657,7 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
         const float inputL=getTotalNumInputChannels()>0?b.getSample(0,s):0;
         const float inputR=getTotalNumInputChannels()>1?b.getSample(1,s):inputL;
         const auto y=engine.processStereo();
-        for(int ch=0;ch<getTotalNumOutputChannels();++ch)b.setSample(ch,s,y[(size_t)ch]+engine.processInput(ch,ch==0?inputL:inputR));
+        for(int ch=0;ch<getTotalNumOutputChannels();++ch)b.setSample(ch,s,(getTotalNumOutputChannels()==1?(y[0]+y[1])*.5f:y[(size_t)ch])+engine.processInput(ch,ch==0?inputL:inputR));
         const float ay = std::max(std::abs(y[0]),std::abs(y[1]));
         const float old = outputMeter.load();
         outputMeter.store(ay > old ? ay : old * 0.9975f);
