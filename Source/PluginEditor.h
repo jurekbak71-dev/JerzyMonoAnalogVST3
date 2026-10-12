@@ -116,6 +116,8 @@ private:
     void drawEnvelope(juce::Graphics&,juce::Rectangle<float>,bool) const;
     void setMainPage(int page);
     void updateGridControls();
+    void updateArpControls();
+    void updateArpMenus();
     void attachGridTrack();
     float scale() const noexcept {return getWidth()/1440.0f;}
     float topHeight() const noexcept {return 720.0f*scale();}
@@ -147,6 +149,12 @@ private:
     juce::ComboBox lfoWave,lfoDivision,glideMode,priority;
     juce::ComboBox arpDivision,arpPattern,arpRhythm,arpOctaves;
 
+    juce::ComboBox arpRouting,arp2Division,arp2Pattern,arp2Rhythm,arp2Octaves;
+    juce::ToggleButton arp2On,arp2HostSync,arp2Latch,arp2Retrigger,gridRootFollow;
+    ResetSlider arpProbability,arp2Gate,arp2Velocity,arp2Swing,arp2Probability;
+    std::unique_ptr<ComboAttachment> arpRoutingA,arp2DivisionA,arp2PatternA,arp2RhythmA,arp2OctavesA;
+    std::unique_ptr<ButtonAttachment> arp2OnA,arp2HostSyncA,arp2LatchA,arp2RetriggerA,gridRootFollowA;
+    std::unique_ptr<SliderAttachment> arpProbabilityA,arp2GateA,arp2VelocityA,arp2SwingA,arp2ProbabilityA;
     ResetSlider osc1Pan,osc2Pan,osc1Level,pulseWidth,osc2Level,detune,subLevel,noiseLevel,mixDrive,drift;
     ResetSlider cutoff,resonance,filterDrive,filterEnv,keyTrack,modEnvPitch,modEnvPWM;
     ResetSlider modEnvOsc2Pitch,modEnvResonance,modEnvMixDrive,modEnvAmp;

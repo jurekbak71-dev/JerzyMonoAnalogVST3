@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "AnalogDSP.h"
 #include "VoiceEngine.h"
+#include "ArpLane.h"
 #include "GridClock.h"
 #include "MonoFxChain.h"
 
@@ -16,7 +17,7 @@ public:
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "Jerzy Mono Analog Grid"; }
+    const juce::String getName() const override { return JucePlugin_Name; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
@@ -57,14 +58,21 @@ public:
     void setGridRootNote(int n) noexcept { gridRootNote.store(juce::jlimit(24,84,n)); }
 private:
     int getChoiceIndex(const char* id) const;
-    int chooseArpNote(int pattern, int step);
-    int arpNoteCount() const;
-    bool arpRhythmGate(int rhythm, int step) const;
+    std::array<jerzy::ArpLane,2> arps;
+    std::array<int,2> arpOutputMask {0,0};
+    std::array<std::array<uint64_t,128>,16> midiKeys {};
+    uint64_t midiSerial=0;
+    bool dualArp=false,previousArpOn=false;
+    std::array<std::array<std::atomic<float>*,12>,2> arpParams {};
+    std::atomic<int> launchPressedPad {-1};
+    std::atomic<int> followRoot {-1};
+    void updateHeldKeys(bool noteOn,double ppq,int channel=-1);
+    void arpOff(int lane,int note,int offset,juce::MidiBuffer& midi);
+    void arpOnNote(int lane,int note,float velocity,int offset,juce::MidiBuffer& midi);
+    void restartGridArp(int track,double ppq);
     void resetArpState();
     void processGridSequencerSample(double bpm,int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool hostHasPpq,bool hostPlaying);
     void processLaunchPadSample(int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool routeToArp);
-    void startGridNote(int note,float velocity,int sampleOffset,juce::MidiBuffer& generatedMidi,double hostPpq,bool routeToArp);
-    void stopGridNote(int sampleOffset,juce::MidiBuffer& generatedMidi);
     void stopLaunchNote(int sampleOffset,juce::MidiBuffer& generatedMidi);
     int gridNoteForRow(int row) const;
     int gridRootMidiFromChoice() const;
@@ -74,15 +82,7 @@ private:
     juce::MidiBuffer inputMidiScratch, generatedMidiScratch;
     std::atomic<float> outputMeter { 0.0f };
     double currentSampleRate = 44100.0;
-    double arpSamplesToNext = 0.0;
-    int arpStep = 0;
-    int arpCurrentNote = -1;
-    int arpUpDownPos = 0;
-    int arpLastRandomIndex = -1;
-    juce::Array<int> arpHeldNotes;
-    juce::Array<int> arpLatchedNotes;
     juce::Array<int> physicalHeldNotes;
-    std::mt19937 arpRng { 0x51a7u };
 
     std::array<std::atomic<uint8_t>, 8*8*8> gridPattern {};
     std::atomic<int> gridMode { 0 };
@@ -97,19 +97,14 @@ private:
     std::atomic<int> launchPressedNote { -1 };
     double gridSamplesToNext = 0.0;
     double gridCurrentStepSamples = 0.0;
-    double arpCurrentStepSamples = 0.0;
     int gridGlobalStep = 0;
-    int lastArpHostStep = -1;
     int lastGridHostStep = -1;
-    int gridCurrentNote = -1;
-    bool gridCurrentNoteRouted = false;
     int gridArpNote = -1;
     int gridArpNote2 = -1;
     int launchCurrentNote = -1;
     bool launchCurrentNoteRouted = false;
     int launchArpNote = -1;
     bool gridArpNeedsRestart = false;
-    double arpGridPpqOrigin = 0.0;
     struct GridSettings
     {
         bool armed = false, midiTrigger = false, hostSync = false, routeToArp = false, noteGate = true;
