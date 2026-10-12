@@ -9,6 +9,9 @@ public:
     JerzyLookAndFeel();
     void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
     void drawLinearSlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider::SliderStyle,juce::Slider&) override;
+    int getSliderThumbRadius(juce::Slider&) override;
+    juce::Slider::SliderLayout getSliderLayout(juce::Slider&) override;
+    juce::Label* createSliderTextBox(juce::Slider&) override;
     void drawToggleButton(juce::Graphics&,juce::ToggleButton&,bool,bool) override;
     void drawComboBox(juce::Graphics&,int,int,bool,int,int,int,int,juce::ComboBox&) override;
     juce::Font getComboBoxFont(juce::ComboBox&) override;
