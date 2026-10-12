@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include <iostream>
 #include <stdexcept>
+#include <memory>
 
 static void check(bool condition, const char* message)
 {
@@ -26,7 +27,7 @@ int main()
 {
     try
     {
-        JerzyMonoAnalogAudioProcessor p;
+        auto pStorage=std::make_unique<JerzyMonoAnalogAudioProcessor>();auto& p=*pStorage;
         p.prepareToPlay(44100.0,512);
         set(p,"arpOn",1.0f);
         set(p,"arpHostSync",0.0f);
@@ -73,7 +74,7 @@ int main()
         p.launchPadNoteOff(5);
         render(p,256);
 
-        JerzyMonoAnalogAudioProcessor direct;
+        auto directStorage=std::make_unique<JerzyMonoAnalogAudioProcessor>();auto& direct=*directStorage;
         direct.prepareToPlay(44100.0,512);
         set(direct,"gridHostSync",0.0f);
         set(direct,"gridSeqOn",1.0f);
