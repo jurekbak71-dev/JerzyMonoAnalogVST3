@@ -15,7 +15,7 @@ public:
     {
         sampleRate = juce::jmax(8000.0, sr);
         const int size = juce::jmax(8192, (int)(sampleRate * 4.1));
-        delayL.assign((size_t)size, 0.0f); delayR.assign((size_t)size, 0.0f); chorusL.assign((size_t)size,0.0f); chorusR.assign((size_t)size,0.0f); widthLine.assign((size_t)juce::jmax(64,(int)(sampleRate*0.03)),0.0f);
+        delayL.assign((size_t)size, 0.0f); delayR.assign((size_t)size, 0.0f); chorusL.assign((size_t)juce::jmax(128,(int)(sampleRate*0.05)),0.0f); chorusR.assign(chorusL.size(),0.0f); widthLine.assign((size_t)juce::jmax(64,(int)(sampleRate*0.03)),0.0f);
         writePos = chorusWritePos = widthPos = 0; compEnvelope = 0.0f; chorusPhase = rotaryPhase = 0.0;
         juce::ignoreUnused(maxBlock);
         reverb.setSampleRate(sampleRate);
@@ -149,10 +149,23 @@ public:
                         const float excursion=chorusMode==1?1.2f:chorusDepth*(chorusMode==2?2.0f:8.0f);
                         const float dL=(base+excursion*(0.5f+0.5f*(float)std::sin(phase)))*0.001f*(float)sampleRate;
                         const float dR=(base+excursion*(0.5f+0.5f*(float)std::sin(phase+1.7)))*0.001f*(float)sampleRate;
-                        const float inL=l[i],inR=r[i]; chorusL[(size_t)chorusWritePos]=inL+chorusFb*chorusL[(size_t)((chorusWritePos+(int)chorusL.size()-1)%(int)chorusL.size())];
-                        chorusR[(size_t)chorusWritePos]=inR+chorusFb*chorusR[(size_t)((chorusWritePos+(int)chorusR.size()-1)%(int)chorusR.size())];
-                        auto read=[&](const std::vector<float>& a,float d){int ix=(writePos-(int)d+(int)a.size())%(int)a.size();return a[(size_t)ix];};
-                        l[i]=inL*(1.0f-chorusMix)+read(chorusL,dL)*chorusMix; r[i]=inR*(1.0f-chorusMix)+read(chorusR,dR)*chorusMix;
+                        const float inL=l[i],inR=r[i];
+                        // Read from the chorus ring (not the unrelated delay write cursor).
+                        // Fractional linear interpolation avoids hard index jumps during modulation.
+                        auto read=[&](const std::vector<float>& a,float d) {
+                            const int len=(int)a.size();
+                            const float pos=(float)chorusWritePos-juce::jlimit(1.0f,(float)(len-2),d);
+                            const float wrapped=pos<0.0f?pos+(float)len:pos;
+                            const int i0=(int)wrapped;
+                            const int i1=i0+1==len?0:i0+1;
+                            const float frac=wrapped-(float)i0;
+                            return a[(size_t)i0]+frac*(a[(size_t)i1]-a[(size_t)i0]);
+                        };
+                        const float wetL=read(chorusL,dL),wetR=read(chorusR,dR);
+                        chorusL[(size_t)chorusWritePos]=std::tanh(inL+chorusFb*wetL);
+                        chorusR[(size_t)chorusWritePos]=std::tanh(inR+chorusFb*wetR);
+                        l[i]=inL*(1.0f-chorusMix)+wetL*chorusMix;
+                        r[i]=inR*(1.0f-chorusMix)+wetR*chorusMix;
                         if(++chorusWritePos >= (int)chorusL.size()) chorusWritePos=0;
                         chorusPhase+=chorusRate/sampleRate; if(chorusPhase>=1.0)chorusPhase-=1.0;
                     } break;
