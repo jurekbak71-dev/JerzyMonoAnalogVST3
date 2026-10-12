@@ -37,5 +37,24 @@ int main(){try{
  int keys[]={48,60,72};lane.keys(keys,3,true,0);lane.settings.pattern=10;for(int i=0;i<100;++i){auto event=lane.process(100,120,i*.02,false,true,-1,-1,-1);if(event.on>=0)check(event.on==48 || event.on==60 || event.on==72,"Random walk remains inside held note pool");}
  lane.settings.probability=0;lane.restart(0);for(int i=0;i<200;++i)check(lane.process(100,120,i*.02,false,true,-1,-1,-1).on<0,"Probability zero produces no notes");
  for(int rhythm:{8,9}){int hits=0;for(int step=0;step<8;++step)hits+=jerzy::ArpLane::rhythmGate(rhythm,step);check(hits==(rhythm==8?3:5),"Euclidean hit count");}
+ // Regression: all chorus modes must produce bounded, finite delayed audio.
+ for(int mode=0;mode<3;++mode) {
+     MonoFxChain fx;fx.prepare(48000,512);
+     set(a,"fxChorusOn",1);set(a,"fxChorusMode",(float)mode);
+     set(a,"fxChorusMix",1);set(a,"fxChorusDepth",1);
+     set(a,"fxChorusFeedback",.7f);
+     double wetEnergy=0;float peak=0;
+     for(int block=0;block<24;++block) {
+         juce::AudioBuffer<float> wave(2,512);wave.clear();
+         if(block==0){wave.setSample(0,0,.7f);wave.setSample(1,0,-.7f);}
+         fx.process(wave,a.apvts,120);
+         for(int i=0;i<512;++i)for(int ch=0;ch<2;++ch){
+             const float v=wave.getSample(ch,i);
+             check(std::isfinite(v),"Chorus sample finite");
+             peak=juce::jmax(peak,std::abs(v));wetEnergy+=(double)v*v;
+         }
+     }
+     check(wetEnergy>1e-5 && peak<2.0f,"Chorus mode emits stable wet signal");
+ }
  std::cout<<"PASS: shared/dual ARP stereo, independent clocks and MIDI pools, note-off, panic, root following, manual root, AUDIO IN bus/stereo, host stop/seek\n";return 0;
 }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}}
