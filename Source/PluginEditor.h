@@ -144,7 +144,7 @@ private:
     juce::ComboBox lfoWave,lfoDivision,glideMode,priority;
     juce::ComboBox arpDivision,arpPattern,arpRhythm,arpOctaves;
 
-    ResetSlider osc1Level,pulseWidth,osc2Level,detune,subLevel,noiseLevel,mixDrive,drift;
+    ResetSlider osc1Pan,osc2Pan,osc1Level,pulseWidth,osc2Level,detune,subLevel,noiseLevel,mixDrive,drift;
     ResetSlider cutoff,resonance,filterDrive,filterEnv,keyTrack,modEnvPitch,modEnvPWM;
     ResetSlider modEnvOsc2Pitch,modEnvResonance,modEnvMixDrive,modEnvAmp;
     ResetSlider aA,aD,aS,aR,fA,fD,fS,fR;
@@ -159,7 +159,7 @@ private:
     std::unique_ptr<ComboAttachment> osc1WaveA,osc1OctA,osc2WaveA,osc2OctA,subWaveA,lfoWaveA,lfoDivisionA,glideModeA,priorityA;
     std::unique_ptr<ComboAttachment> arpDivisionA,arpPatternA,arpRhythmA,arpOctavesA;
     std::unique_ptr<ComboAttachment> gridDivisionA,gridRootA,gridScaleA,gridBanksA,gridDirectionA,gridOctaveA;
-    std::unique_ptr<SliderAttachment> osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
+    std::unique_ptr<SliderAttachment> osc1PanA,osc2PanA,osc1LevelA,pulseWidthA,osc2LevelA,detuneA,subLevelA,noiseLevelA,mixDriveA,driftA;
     std::unique_ptr<ComboAttachment> filterModeA;
     std::unique_ptr<SliderAttachment> modEnvPitchA,modEnvPWMA;
     std::unique_ptr<SliderAttachment> modEnvOsc2PitchA,modEnvResonanceA,modEnvMixDriveA,modEnvAmpA;

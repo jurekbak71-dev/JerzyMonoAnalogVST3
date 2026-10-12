@@ -356,6 +356,8 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
     p.subWave = waveFrom(apvts.getRawParameterValue("subWave")->load()) == jerzy::BandLimitedOscillator::Wave::sine ? jerzy::BandLimitedOscillator::Wave::sine : jerzy::BandLimitedOscillator::Wave::square;
     p.osc1Octave = (int) apvts.getRawParameterValue("osc1Oct")->load() - 2;
     p.osc2Octave = (int) apvts.getRawParameterValue("osc2Oct")->load() - 2;
+    p.osc1Pan=apvts.getRawParameterValue("osc1Pan")->load();
+    p.osc2Pan=apvts.getRawParameterValue("osc2Pan")->load();
     p.osc1Level = apvts.getRawParameterValue("osc1Level")->load();
     p.osc2Level = apvts.getRawParameterValue("osc2Level")->load();
     p.subLevel = apvts.getRawParameterValue("subLevel")->load();
@@ -654,9 +656,9 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
 
         const float inputL=getTotalNumInputChannels()>0?b.getSample(0,s):0;
         const float inputR=getTotalNumInputChannels()>1?b.getSample(1,s):inputL;
-        const float y=engine.processSample();
-        for(int ch=0;ch<getTotalNumOutputChannels();++ch)b.setSample(ch,s,y+engine.processInput(ch,ch==0?inputL:inputR));
-        const float ay = std::abs(y);
+        const auto y=engine.processStereo();
+        for(int ch=0;ch<getTotalNumOutputChannels();++ch)b.setSample(ch,s,y[(size_t)ch]+engine.processInput(ch,ch==0?inputL:inputR));
+        const float ay = std::max(std::abs(y[0]),std::abs(y[1]));
         const float old = outputMeter.load();
         outputMeter.store(ay > old ? ay : old * 0.9975f);
     }
@@ -704,7 +706,7 @@ void JerzyMonoAnalogAudioProcessor::setStateInformation(const void* d, int n)
         if(st.hasProperty("fxOrder")){auto tokens=juce::StringArray::fromTokens(st["fxOrder"].toString(),",","");std::array<int,MonoFxChain::count> order{0,1,2,3,4,5};if(tokens.size()==MonoFxChain::count){for(int i=0;i<MonoFxChain::count;++i)order[(size_t)i]=tokens[i].getIntValue();fxChain.setOrder(order);}st.removeProperty("fxOrder",nullptr);}
         // An old preset must reset destinations added in 0.4 instead of inheriting
         // whatever the previously loaded preset left in the current processor.
-        for(const auto* id : {"filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth", "gridOctave", "gridProbability", "gridRatchet", "modEnvOsc2Pitch", "modEnvResonance", "modEnvMixDrive", "modEnvAmp", "gridToArp"})
+        for(const auto* id : {"osc1Pan", "osc2Pan", "filterMode", "modEnvPitch", "modEnvPWM", "gridDirection", "gridSwing", "gridVelocity", "arpSwing", "arpVelocity", "gridHostSync", "arpHostSync", "fxCompOn", "fxCompThreshold", "fxCompRatio", "fxCompAttack", "fxCompRelease", "fxCompDrive", "fxDelayOn", "fxDelayDivision", "fxDelayMode", "fxDelayFeedback", "fxDelayMix", "fxReverbOn", "fxReverbSize", "fxReverbDamping", "fxReverbMix", "fxWidthOn", "fxWidth", "fxChorusOn", "fxChorusMode", "fxChorusRate", "fxChorusDepth", "fxChorusMix", "fxChorusFeedback", "fxRotaryOn", "fxRotarySync", "fxRotaryDivision", "fxRotaryRate", "fxRotaryDepth", "gridOctave", "gridProbability", "gridRatchet", "modEnvOsc2Pitch", "modEnvResonance", "modEnvMixDrive", "modEnvAmp", "gridToArp"})
         {
             if(!st.getChildWithProperty("id",id).isValid())
             {
@@ -862,6 +864,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout JerzyMonoAnalogAudioProcesso
     l.add(std::make_unique<P>("grid2Swing","OSC2 Swing",0.0f,.49f,0.0f));
     for(int t=0;t<2;++t)for(int step=0;step<64;++step)
         l.add(std::make_unique<P>("gateT"+juce::String(t+1)+"S"+juce::String(step),"OSC"+juce::String(t+1)+" Step "+juce::String(step+1)+" Gate",juce::NormalisableRange<float>(1,16,1),1));
+    l.add(std::make_unique<P>("osc1Pan","OSC1 Pan",-1.0f,1.0f,0.0f));
+    l.add(std::make_unique<P>("osc2Pan","OSC2 Pan",-1.0f,1.0f,0.0f));
     return l;
 }
 

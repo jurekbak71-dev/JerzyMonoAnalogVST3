@@ -94,12 +94,13 @@ public:
         voices[0].oscillatorAllSoundOff(track);
         if(audioEnabled)for(auto& v:external)v.oscillatorAllSoundOff(track);
     }
-    float processSample() {
-        if(mode!=2)return voices[0].processSample();
-        float result=0;
-        for(auto& voice:voices)if(voice.isActive())result+=voice.processSample();
-        return result*.40824829f; // Fixed 1/sqrt(6) headroom: no pumping as voices release.
+    std::array<float,2> processStereo() {
+        if(mode!=2)return voices[0].processStereo();
+        std::array<float,2> result {};
+        for(auto& voice:voices)if(voice.isActive()){const auto y=voice.processStereo();for(size_t ch=0;ch<2;++ch)result[ch]+=y[ch]*.40824829f;}
+        return result;
     }
+    float processSample(){const auto y=processStereo();return (y[0]+y[1])*.5f;}
     float processInput(int channel,float input) {return audioEnabled?external[(size_t)juce::jlimit(0,1,channel)].processSample(input*audioGain):0.0f;}
     int activeNotes() const {if(mode!=2)return 0;return (int)std::count_if(notes.begin(),notes.end(),[](int n){return n>=0;});}
 private:

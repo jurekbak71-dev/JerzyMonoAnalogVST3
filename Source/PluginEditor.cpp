@@ -436,6 +436,7 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     lfoDivisionA=std::make_unique<ComboAttachment>(s,"lfoDivision",lfoDivision);glideModeA=std::make_unique<ComboAttachment>(s,"glideMode",glideMode);priorityA=std::make_unique<ComboAttachment>(s,"priority",priority);
     arpDivisionA=std::make_unique<ComboAttachment>(s,"arpDivision",arpDivision);arpPatternA=std::make_unique<ComboAttachment>(s,"arpPattern",arpPattern);arpRhythmA=std::make_unique<ComboAttachment>(s,"arpRhythm",arpRhythm);arpOctavesA=std::make_unique<ComboAttachment>(s,"arpOctaves",arpOctaves);
 
+    osc1PanA=std::make_unique<SliderAttachment>(s,"osc1Pan",osc1Pan);osc2PanA=std::make_unique<SliderAttachment>(s,"osc2Pan",osc2Pan);
     osc1LevelA=std::make_unique<SliderAttachment>(s,"osc1Level",osc1Level);pulseWidthA=std::make_unique<SliderAttachment>(s,"pw",pulseWidth);osc2LevelA=std::make_unique<SliderAttachment>(s,"osc2Level",osc2Level);detuneA=std::make_unique<SliderAttachment>(s,"detune",detune);
     subLevelA=std::make_unique<SliderAttachment>(s,"subLevel",subLevel);noiseLevelA=std::make_unique<SliderAttachment>(s,"noiseLevel",noiseLevel);mixDriveA=std::make_unique<SliderAttachment>(s,"mixDrive",mixDrive);driftA=std::make_unique<SliderAttachment>(s,"drift",drift);
     cutoffA=std::make_unique<SliderAttachment>(s,"cutoff",cutoff);resonanceA=std::make_unique<SliderAttachment>(s,"resonance",resonance);filterDriveA=std::make_unique<SliderAttachment>(s,"filterDrive",filterDrive);filterEnvA=std::make_unique<SliderAttachment>(s,"filterEnv",filterEnv);keyTrackA=std::make_unique<SliderAttachment>(s,"keyTrack",keyTrack);
@@ -468,6 +469,9 @@ JerzyMonoAnalogAudioProcessorEditor::JerzyMonoAnalogAudioProcessorEditor(JerzyMo
     setupKnob(gridProbability,"PROBABILITY","%",1.0);
     setupKnob(arpSwing,"SWING","%",0.0);setupKnob(arpVelocity,"VELOCITY","%",0.9);
 
+    setupKnob(osc1Pan,"PAN OSC 1","",0.0);setupKnob(osc2Pan,"PAN OSC 2","",0.0);
+    for(auto* pan:{&osc1Pan,&osc2Pan})pan->textFromValueFunction=[](double v){return std::abs(v)<0.005?juce::String("CENTER"):juce::String(v<0?"L ":"R ")+juce::String(juce::roundToInt(std::abs(v)*100));};
+    for(auto* pan:{&osc1Pan,&osc2Pan})pan->valueFromTextFunction=[](const juce::String& text){auto t=text.trim().toUpperCase();if(t=="CENTER")return 0.0;return juce::jlimit(-1.0,1.0,t.retainCharacters("0123456789.-").getDoubleValue()/100.0*(t.startsWith("L")?-1.0:1.0));};
     setupKnob(osc1Level,"LEVEL","%",0.0);setupKnob(pulseWidth,"PULSE WIDTH","%",0.5);
     setupKnob(osc2Level,"LEVEL","%",0.0);setupKnob(detune,"DETUNE","ct",0.0);
     setupKnob(subLevel,"SUB LEVEL","%",0.0);setupKnob(noiseLevel,"NOISE","%",0.0);
@@ -607,6 +611,7 @@ void JerzyMonoAnalogAudioProcessorEditor::paint(juce::Graphics& g)
                    350*sc,615*sc,1040*sc,25*sc,juce::Justification::centredLeft);
         g.drawText("New attack on each note: LEGATO off or RETRIGGER on. Two Piano Rolls: see README.",
                    350*sc,641*sc,1040*sc,25*sc,juce::Justification::centredLeft);
+        label("PAN OSC 1",100,292,130);label("PAN OSC 2",400,292,130);
         label("VOICE MODE",350,530,220);label("AUDIO INPUT",625,530,135);label("INPUT ENVELOPE",775,530,245);label("INPUT GAIN",1040,540,350);
         label("WAVE",30,112,130);label("OCTAVE",175,112,130);label("LEVEL",40,169,110);label("PULSE WIDTH",175,169,130);
         label("WAVE",330,112,130);label("OCTAVE",475,112,130);label("LEVEL",340,169,110);label("DETUNE",475,169,130);
@@ -655,10 +660,11 @@ void JerzyMonoAnalogAudioProcessorEditor::resized()
     for(int i=0;i<6;++i)place(pageButtons[(size_t)i],320+i*145,15,136,38);
     if(fxPage){place(fxPanel,15,80,1410,615);return;}
     if(modulePage==0){
+        place(osc1Pan,115,310,100,82);place(osc2Pan,415,310,100,82);
         place(voiceModeBox,350,550,220,36);place(audioInOn,625,550,135,36);
         place(audioInGate,775,550,245,36);place(audioInGain,1040,560,350,36);
-        place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,35,190,120,126);place(pulseWidth,180,190,120,126);
-        place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,335,190,120,126);place(detune,480,190,120,126);
+        place(osc1Wave,30,130,130,32);place(osc1Oct,175,130,130,32);place(osc1Level,35,190,120,100);place(pulseWidth,180,190,120,100);
+        place(osc2Wave,330,130,130,32);place(osc2Oct,475,130,130,32);place(osc2Level,335,190,120,100);place(detune,480,190,120,100);
         place(subWave,645,130,180,32);place(subLevel,655,190,80,126);place(noiseLevel,745,190,80,126);
         place(mixDrive,860,190,115,126);place(drift,1000,190,115,126);
         place(outDrive,1175,190,115,126);place(master,1300,190,115,126);
@@ -705,14 +711,14 @@ void JerzyMonoAnalogAudioProcessorEditor::setMainPage(int page)
     std::initializer_list<juce::Component*> all={
         &voiceModeBox,&audioInOn,&audioInGain,&audioInGate,&gridTrackBox,&grid2On,&gridNoteGate,&gridExactLength,&stepGate,&stepGateLabel,&lfoGate,
         &osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&filterMode,&lfoWave,&lfoDivision,&glideMode,&priority,&arpDivision,&arpPattern,&arpRhythm,&arpOctaves,&gridDivision,&gridRoot,&gridScale,&gridBanks,&gridDirection,&gridOctave,&gridRatchet,
-        &osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,
+        &osc1Pan,&osc2Pan,&osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,
         &aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&glide,&outDrive,&master,&arpGate,&arpSwing,&arpVelocity,&gridGate,&gridSwing,&gridVelocity,&gridProbability,
         &legato,&retrigger,&lfoSync,&arpOn,&arpLatch,&arpRetrigger,&arpHostSync,&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridToArp,&gridModeButton,&gridClearButton,&gridBankBox,&padGrid,&outputMeter
     };
     for(auto* c:all)c->setVisible(false);
     fxPanel.setVisible(fxPage);
     auto show=[&](std::initializer_list<juce::Component*> list){for(auto* c:list)c->setVisible(true);};
-    if(modulePage==0)show({&voiceModeBox,&audioInOn,&audioInGain,&audioInGate,&osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&glide,&glideMode,&priority,&legato,&retrigger,&outDrive,&master,&outputMeter});
+    if(modulePage==0)show({&voiceModeBox,&audioInOn,&audioInGain,&audioInGate,&osc1Wave,&osc1Oct,&osc2Wave,&osc2Oct,&subWave,&osc1Pan,&osc2Pan,&osc1Level,&pulseWidth,&osc2Level,&detune,&subLevel,&noiseLevel,&mixDrive,&drift,&glide,&glideMode,&priority,&legato,&retrigger,&outDrive,&master,&outputMeter});
     if(modulePage==1)show({&filterMode,&cutoff,&resonance,&filterDrive,&filterEnv,&keyTrack,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp,&aA,&aD,&aS,&aR,&fA,&fD,&fS,&fR});
     if(modulePage==2)show({&lfoGate,&lfoWave,&lfoDivision,&lfoSync,&lfoRate,&lfoPitch,&lfoFilter,&lfoPWM,&lfoAmp,&lfoFade,&modEnvPitch,&modEnvPWM,&modEnvOsc2Pitch,&modEnvResonance,&modEnvMixDrive,&modEnvAmp});
     if(modulePage==3)show({&gridTrackBox,&grid2On,&gridExactLength,&stepGate,&stepGateLabel,&gridNoteGate,&gridSeqOn,&gridMidiTrigger,&gridHostSync,&gridToArp,&gridModeButton,&gridClearButton,&gridBankBox,&gridBanks,&gridDivision,&gridScale,&gridRoot,&gridDirection,&gridOctave,&gridRatchet,&gridGate,&gridSwing,&gridVelocity,&gridProbability,&padGrid});

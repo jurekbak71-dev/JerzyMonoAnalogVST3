@@ -463,6 +463,7 @@ struct MonoParameters
     int osc1Octave = 0, osc2Octave = 0;
     double osc1Level = 0.75, osc2Level = 0.55, subLevel = 0.25, noiseLevel = 0.0;
     double osc2DetuneCents = 7.0, pulseWidth = 0.5;
+    double osc1Pan = 0.0, osc2Pan = 0.0;
     double mixerDrive = 0.18;
     double cutoffHz = 1800.0, resonance = 0.15, filterDrive = 0.12, filterEnvOct = 2.5, keyTrack = 0.25;
     double ampAttack = 0.005, ampDecay = 0.18, ampSustain = 0.75, ampRelease = 0.22;
@@ -494,13 +495,13 @@ public:
         osc2.prepare(sampleRate, 0xabcdefu);
         sub.prepare(sampleRate, 0x77aa55u);
         lfo.prepare(sampleRate, 0x818181u);
-        filter.prepare(sampleRate);
-        multimode.prepare(sampleRate);
+        for(auto& lane:filter)lane.prepare(sampleRate);
+        for(auto& lane:multimode)lane.prepare(sampleRate);
         ampEnv.prepare(sampleRate);
         filterEnv.prepare(sampleRate);
-        outputDC.prepare(sampleRate); mixerDC.prepare(sampleRate);
-        decimA.prepare();
-        decimB.prepare();
+        for(auto& lane:outputDC)lane.prepare(sampleRate); for(auto& lane:mixerDC)lane.prepare(sampleRate);
+        for(auto& lane:decimA)lane.prepare();
+        for(auto& lane:decimB)lane.prepare();
         noiseRng.seed(0xdeadbeefu); keyRng.seed(0x13579bdu);
         smoothingCoefficient = 1.0 - std::exp(-1.0 / (0.003 * sampleRate));
         parametersInitialised = false;
@@ -509,13 +510,13 @@ public:
 
     void reset()
     {
-        osc1.reset(); osc2.reset(); sub.reset(); lfo.reset(); filter.reset(); ampEnv.reset(); filterEnv.reset(); outputDC.reset(); mixerDC.reset();
-        decimA.reset(); decimB.reset();
+        osc1.reset(); osc2.reset(); sub.reset(); lfo.reset(); for(auto& lane:filter)lane.reset(); ampEnv.reset(); filterEnv.reset(); for(auto& lane:outputDC)lane.reset(); for(auto& lane:mixerDC)lane.reset();
+        for(auto& lane:decimA)lane.reset(); for(auto& lane:decimB)lane.reset();
         currentNote = -1; targetMidi = currentMidi = 60.0; heldNotes.clear();
         heldNotes.ensureStorageAllocated(128);
-        multimode.reset();
+        for(auto& lane:multimode)lane.reset();
         filterWeights.fill(0.0); filterWeights[static_cast<size_t>(params.filterMode)] = 1.0;
-        lastOutput = 0.0; lfoFadeValue = 1.0;
+        lastOutput.fill(0.0); lfoFadeValue = 1.0;
         paraMode=false;paraNotes.fill(-1);paraGain.fill(0.0);paraReleaseGain.fill(0.0);externalSample=0.0;externalVcaGain=0.0;
     }
 
@@ -572,7 +573,7 @@ public:
         }
     }
 
-    bool isActive() const noexcept { return ampEnv.isActive() || std::abs(lastOutput) > 1.0e-8; }
+    bool isActive() const noexcept { return ampEnv.isActive() || std::max(std::abs(lastOutput[0]),std::abs(lastOutput[1])) > 1.0e-8; }
     void oscillatorNoteOn(int track, int note, float velocity)
     {
         track = juce::jlimit(0,1,track);
@@ -602,26 +603,19 @@ public:
         if(paraNotes[0]<0 && paraNotes[1]<0 && paraReleaseGain[0]==0 && paraReleaseGain[1]==0){ampEnv.reset();filterEnv.reset();}
     }
 
-    float processSample(float external = 0.0f)
+    std::array<float,2> processStereo(float external = 0.0f)
     {
         externalSample = external;
-        double aOut = 0.0, bOut = lastOutput;
-        for (int i = 0; i < osFactor; ++i)
-        {
-            const double hi = processOversampled();
-            if (decimA.process(hi, aOut))
-            {
-                double candidate = 0.0;
-                if (decimB.process(aOut, candidate))
-                {
-                    bOut = candidate;
-                    lastOutput = candidate;
-                }
+        for(int i=0;i<osFactor;++i) {
+            const auto hi=processOversampled();
+            for(size_t ch=0;ch<2;++ch) {
+                double a=0.0,b=0.0;
+                if(decimA[ch].process(hi[ch],a) && decimB[ch].process(a,b))lastOutput[ch]=b;
             }
         }
-        // Keep floating-point headroom for the output drive and post-synth FX.
-        return (float)bOut;
+        return {(float)lastOutput[0],(float)lastOutput[1]};
     }
+    float processSample(float external = 0.0f) { const auto y=processStereo(external);return (y[0]+y[1])*0.5f; }
 
 private:
     void selectPriorityNote()
@@ -636,9 +630,11 @@ private:
         targetMidi = (double)chosen;
     }
 
-    double processOversampled()
+    std::array<double,2> processOversampled()
     {
         MonoParameters p = params;
+        p.osc1Pan=smoothed.osc1Pan+=smoothingCoefficient*(params.osc1Pan-smoothed.osc1Pan);
+        p.osc2Pan=smoothed.osc2Pan+=smoothingCoefficient*(params.osc2Pan-smoothed.osc2Pan);
         p.osc1Level = smoothed.osc1Level += smoothingCoefficient * (params.osc1Level - smoothed.osc1Level);
         p.osc2Level = smoothed.osc2Level += smoothingCoefficient * (params.osc2Level - smoothed.osc2Level);
         p.subLevel = smoothed.subLevel += smoothingCoefficient * (params.subLevel - smoothed.subLevel);
@@ -706,11 +702,17 @@ private:
         const double n = noiseDist(noiseRng);
         const double vco1 = osc1.process();
         sub.setFrequency(osc1.getLastFrequency() * 0.5);
-        double mix = p.osc1Level * vco1 * (paraMode?paraGain[0]:1.0)
-                   + p.osc2Level * osc2.process() * (paraMode?paraGain[1]:1.0)
-                   + p.subLevel  * sub.process() * (paraMode?paraGain[0]:1.0)
-                   + p.noiseLevel * n + externalSample;
-
+        const double source1=(p.osc1Level*vco1+p.subLevel*sub.process())*(paraMode?paraGain[0]:1.0);
+        const double source2=p.osc2Level*osc2.process()*(paraMode?paraGain[1]:1.0);
+        // Centre-unity balance preserves legacy centred patches and avoids a level boost.
+        const auto balance=[](double pan,size_t ch){return ch==0?1.0-std::max(0.0,pan):1.0+std::min(0.0,pan);};
+        const size_t selected=static_cast<size_t>(p.filterMode);
+        for(size_t mode=0;mode<filterWeights.size();++mode)
+            filterWeights[mode]+=smoothingCoefficient*((mode==selected?1.0:0.0)-filterWeights[mode]);
+        externalVcaGain+=smoothingCoefficient*((p.externalOpen?1.0:ae*velocityGain)-externalVcaGain);
+        std::array<double,2> result {};
+        for(size_t ch=0;ch<2;++ch) {
+        double mix=source1*balance(p.osc1Pan,ch)+source2*balance(p.osc2Pan,ch)+p.noiseLevel*n+externalSample;
         // Mixer drive is a real pre-filter gain stage. Blend from clean at zero
         // to progressively harder transistor clipping without compensating away
         // the added harmonics and level.
@@ -718,25 +720,25 @@ private:
         const double mixDrive = 1.0 + 7.0 * driveAmount;
         const double drivenMix = saturateAsymmetric(mix * mixDrive);
         mix += driveAmount * (drivenMix - mix);
-        mix = mixerDC.process(mix);
+        mix = mixerDC[ch].process(mix);
 
         const double resonance = juce::jlimit(0.0, 1.15, p.resonance + fe * p.modEnvResonance);
-        filter.setParams(p.cutoffHz, resonance, p.filterDrive, p.keyTrack, currentMidi);
+        filter[ch].setParams(p.cutoffHz, resonance, p.filterDrive, p.keyTrack, currentMidi);
         const double filterMod = fe * p.filterEnvOct + lf * p.lfoFilterOct;
-        const double ladder = filter.process(mix, filterMod);
+        const double ladder = filter[ch].process(mix, filterMod);
         const double keyOct = (currentMidi - 60.0) / 12.0 * p.keyTrack;
-        const auto classic = multimode.process(mix, p.cutoffHz * std::pow(2.0, keyOct + filterMod), resonance, p.filterDrive);
+        const auto classic = multimode[ch].process(mix, p.cutoffHz * std::pow(2.0, keyOct + filterMod), resonance, p.filterDrive);
         double y = 0.0;
-        const size_t selected = static_cast<size_t>(p.filterMode);
+
         // Keep all filter states running and crossfade; changing type never clears the tail.
         for (size_t mode = 0; mode < filterWeights.size(); ++mode)
         {
-            filterWeights[mode] += smoothingCoefficient * ((mode == selected ? 1.0 : 0.0) - filterWeights[mode]);
+
             y += filterWeights[mode] * (mode == 0 ? ladder : classic[mode - 1]);
         }
 
         const double tremolo = 1.0 - p.lfoAmp * 0.5 * (lf + 1.0);
-        externalVcaGain += smoothingCoefficient*((p.externalOpen?1.0:ae*velocityGain)-externalVcaGain);
+
         const double vca = y * (p.externalProcessing?externalVcaGain:ae*velocityGain) * tremolo * juce::jlimit(0.0, 2.0, 1.0 + fe * p.modEnvAmp);
         const double vcaBiased = vca + 0.012 * vca * vca;
         y = saturateAsymmetric(vcaBiased * 1.28) / 1.12;
@@ -748,8 +750,10 @@ private:
         const double outGain=std::pow(10.0,(18.0*outAmount)/20.0);
         const double drivenOut=saturateAsymmetric(y*outGain);
         y += outAmount*(drivenOut-y);
-        y = outputDC.process(y) * p.master;
-        return y;
+        y = outputDC[ch].process(y) * p.master;
+        result[ch]=y;
+        }
+        return result;
     }
 
     double hostRate = 44100.0, sampleRate = 176400.0;
@@ -759,15 +763,16 @@ private:
     bool parametersInitialised = false;
     BandLimitedOscillator osc1, osc2, sub;
     AnalogLFO lfo;
-    NonlinearLadder filter;
-    ClassicMultimode multimode;
+    std::array<NonlinearLadder,2> filter;
+    std::array<ClassicMultimode,2> multimode;
     std::array<double, 7> filterWeights {1.0,0.0,0.0,0.0,0.0,0.0,0.0};
     AnalogADSR ampEnv, filterEnv;
-    DCBlocker outputDC, mixerDC;
-    HalfBandDecimator2x decimA, decimB;
+    std::array<DCBlocker,2> outputDC, mixerDC;
+    std::array<HalfBandDecimator2x,2> decimA, decimB;
     juce::Array<int> heldNotes;
     int currentNote = -1;
-    double targetMidi = 60.0, currentMidi = 60.0, velocityGain = 1.0, lastOutput = 0.0;
+    double targetMidi = 60.0, currentMidi = 60.0, velocityGain = 1.0;
+    std::array<double,2> lastOutput {};
     double lfoFadeValue = 1.0;
     bool paraMode = false;
     std::array<int,2> paraNotes {-1,-1};

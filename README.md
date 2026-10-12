@@ -203,3 +203,7 @@ left intact. Effects are bypassed by default to preserve existing presets.
 - Values display percentages, milliseconds, semitones, dB or frequency where
   appropriate. The clock and modulation paths have regression coverage.
 
+
+## 0.12.0 — oscillator stereo panorama
+
+OSC / MIX now provides PAN OSC 1 and PAN OSC 2, from L 100 through CENTER to R 100. Right-click resets to centre. Mono and Paraphonic retain one stereo output and a shared AMP envelope. SUB follows OSC 1; noise stays centred. The two filter lanes share controls but maintain separate audio states. Pan is smoothed and host-automatable. Old presets reset both pans to centre. Post-synth stereo FX may mix the channels. The same pan controls also apply per voice in Poly mode.

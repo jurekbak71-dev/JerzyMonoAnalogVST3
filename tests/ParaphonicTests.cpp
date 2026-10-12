@@ -48,5 +48,16 @@ int main(){try{
     p.ampDecay=.02;p.retrigger=true;voice.setParameters(p);voice.midiNoteOn(1,60,1);energy(voice,4800);
     check(energy(voice,2400)<1e-10,"Zero sustain reaches silence while key is held");
     voice.midiNoteOn(2,67,1);check(energy(voice,960)>.0001,"OSC2 note retriggers shared AMP when enabled");
+    for(double sr:{44100.0,48000.0,96000.0})for(int mode:{0,1})for(int source:{0,1,2,3})for(int direction:{-1,0,1}) {
+        voice.prepare(sr,512);voice.setMode(mode);p=jerzy::MonoParameters{};
+        p.osc1Level=source==0?1:0;p.osc2Level=source==1?1:0;p.subLevel=source==2?1:0;p.noiseLevel=source==3?.3:0;
+        p.osc1Pan=p.osc2Pan=direction;p.ampAttack=.001;p.ampDecay=.001;p.ampSustain=1;
+        voice.setParameters(p);voice.midiNoteOn(source==1?2:1,60,1);
+        double left=0,right=0,difference=0;
+        for(int i=0;i<4096;++i){auto y=voice.processStereo();check(std::isfinite(y[0])&&std::isfinite(y[1]),"Finite stereo output");left+=y[0]*y[0];right+=y[1]*y[1];difference+=std::abs(y[0]-y[1]);}
+        if(direction==0||source==3)check(difference<1e-8&&left>1e-5,"Centred oscillators and noise remain centred");
+        else if(direction<0)check(left>1e-5&&right<1e-12,"Hard left has no right leakage, including SUB");
+        else check(right>1e-5&&left<1e-12,"Hard right has no left leakage, including SUB");
+    }
     std::cout<<"PASS: paraphonic AMP ADSR, release tails, channel addressing, same pitches, held-key fallback, flush, retrigger\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
