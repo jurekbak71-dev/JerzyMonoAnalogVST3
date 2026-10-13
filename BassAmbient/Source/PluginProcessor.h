@@ -1,5 +1,8 @@
 #pragma once
 #include <JuceHeader.h>
+#ifndef BASS_AMBIENT_MOBILE
+#define BASS_AMBIENT_MOBILE 0
+#endif
 #include "Core.h"
 #include "Capture.h"
 
@@ -33,13 +36,22 @@ public:
     void setStateInformation(const void*,int) override;
     jerzy::Parameters readParameters() const;
     juce::AudioProcessorValueTreeState state;
+#if BASS_AMBIENT_MOBILE
+    juce::MidiKeyboardState keyboardState;
+#endif
     std::atomic<int> rootDisplay{-1};
     std::atomic<float> peak{0};
     void applyPreset(int preset);
     std::atomic<bool> auditionBass{false},auditionPad{false};
     std::atomic<bool> hostRunning{false};
     std::atomic<int> requestedScene{-1},activeScene{-1};
-    void panicNow() {auditionBass=false;auditionPad=false;resetRequested=true;}
+    void panicNow() {
+        auditionBass=false;auditionPad=false;
+#if BASS_AMBIENT_MOBILE
+        keyboardState.allNotesOff(0);
+#endif
+        resetRequested=true;
+    }
     void generate(bool mutation);
     void undoGeneration();
     void saveScene(int index);

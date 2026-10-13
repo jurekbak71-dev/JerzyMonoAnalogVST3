@@ -24,6 +24,11 @@ private:
     bool storing=false;
     std::unique_ptr<juce::FileChooser> chooser;
     void exportPerformance(bool midi);
+#if BASS_AMBIENT_MOBILE
+    juce::TextButton mobileActions{"MORE"};
+    juce::ScopedMessageBox sharing;
+    void showMobileActions();
+#endif
     juce::Label status;
     int selected=0, selectedRack=0;
     Page& currentPage();

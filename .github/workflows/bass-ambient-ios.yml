@@ -1,0 +1,68 @@
+name: Bass Ambient iOS standalone
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ios/bass-ambient-**"]
+    paths: ["BassAmbient/**", ".github/workflows/bass-ambient-ios.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: bass-ambient-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dsp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: DSP equivalence, performance and memory
+        run: |
+          g++ -std=c++17 -O2 -I BassAmbient/Source BassAmbient/tests/PerformanceTests.cpp -o performance
+          ./performance
+          g++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -I BassAmbient/Source BassAmbient/tests/CoreTests.cpp -o core
+          ./core
+  ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iphoneos, iphonesimulator]
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure standalone iOS application
+        run: |
+          cmake -S BassAmbient -B build-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=${{ matrix.platform }} \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DBUILD_TESTING=OFF -DBASS_AMBIENT_SMOKE_TEST=${{ matrix.platform == 'iphonesimulator' && 'ON' || 'OFF' }}
+      - name: Build arm64 application
+        run: cmake --build build-ios --config Release --target BassAmbientIOS --parallel 3
+      - name: Find app bundle
+        run: |
+          APP_PATH=$(find "$PWD/build-ios/BassAmbientIOS_artefacts" -name 'Bass Ambient.app' -type d | head -1)
+          test -n "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist"
+      - name: Test on iPhone 14 simulator
+        if: matrix.platform == 'iphonesimulator'
+        run: bash BassAmbient/iOS/test-simulator.sh
+      - name: Package unsigned IPA for local Sideloadly signing
+        if: matrix.platform == 'iphoneos'
+        run: |
+          python3 BassAmbient/iOS/package.py "$APP_PATH" delivery
+          cp BassAmbient/iOS/INSTALACJA-WINDOWS.md delivery/
+          shasum -a 256 delivery/*.ipa > delivery/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'iphoneos'
+        with:
+          name: Bass-Ambient-0.4.0-iPhone-iPad-Sideloadly
+          path: delivery/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.platform == 'iphonesimulator'
+        with:
+          name: Bass-Ambient-iOS-simulator-QA
+          path: simulator-qa/
+          if-no-files-found: warn

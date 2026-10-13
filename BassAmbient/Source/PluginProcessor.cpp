@@ -89,6 +89,9 @@ bool BassAmbientProcessor::isBusesLayoutSupported(const BusesLayout& buses) cons
 void BassAmbientProcessor::processBlock(juce::AudioBuffer<float>& audio,juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     if(resetRequested.exchange(false)) {instrument.reset();current=readParameters();}
+#if BASS_AMBIENT_MOBILE
+    keyboardState.processNextMidiBuffer(midi,0,audio.getNumSamples(),true);
+#endif
     audio.clear();auto target=readParameters();
     if(target.sceneSelect!=lastSceneSelection) {if(target.sceneSelect>0)requestedScene=target.sceneSelect-1;lastSceneSelection=target.sceneSelect;}
     // Structural changes are immediate; continuous controls ramp at audio rate.

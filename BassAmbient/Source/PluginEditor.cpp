@@ -58,6 +58,9 @@ class BassAmbientEditor::Control final : public juce::Component {
 public:
     Control(BassAmbientProcessor& p,const ParameterSpec& s,int section):spec(s) {
         slider.setColour(juce::Slider::rotarySliderFillColourId,sectionColour(section));
+#if BASS_AMBIENT_MOBILE
+        slider.setMouseDragSensitivity(180);
+#endif
         label.setText(s.label,juce::dontSendNotification);label.setJustificationType(juce::Justification::centred);
         label.setFont(juce::Font(juce::FontOptions(14)));addAndMakeVisible(label);
         if(s.kind==1) {
@@ -100,7 +103,7 @@ public:
             choiceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,s.id,choice);
         } else {
             slider.setSliderStyle(s.kind==2?juce::Slider::LinearHorizontal:juce::Slider::RotaryHorizontalVerticalDrag);
-            slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,90,22);
+            slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,90,BASS_AMBIENT_MOBILE?30:22);
             slider.setNumDecimalPlacesToDisplay(s.kind==2?0:3);
             slider.setTooltip(s.label+" - automatable in FL Studio");
             addAndMakeVisible(slider);
@@ -118,8 +121,8 @@ public:
     }
     void resized() override {
         auto bounds=getLocalBounds().reduced(10);label.setBounds(bounds.removeFromTop(30));
-        if(spec.kind==1) toggle.setBounds(bounds.withSizeKeepingCentre(80,32));
-        else if(spec.kind==3) choice.setBounds(bounds.withSizeKeepingCentre(bounds.getWidth(),32));
+        if(spec.kind==1) toggle.setBounds(bounds.withSizeKeepingCentre(90,BASS_AMBIENT_MOBILE?44:32));
+        else if(spec.kind==3) choice.setBounds(bounds.withSizeKeepingCentre(bounds.getWidth(),BASS_AMBIENT_MOBILE?44:32));
         else slider.setBounds(bounds);
     }
 };
@@ -198,7 +201,7 @@ public:
             if(!include) continue;
 
             auto control=std::make_unique<Control>(processor,spec,index==0?0:index==1?1:2);
-            control->setComponentID(spec.id);addAndMakeVisible(*control);
+            control->setComponentID(spec.id);control->setViewportIgnoreDragFlag(true);addAndMakeVisible(*control);
             controls.push_back({std::move(control),itemModule,itemSection});
         }
         if(index==0) {
@@ -238,8 +241,8 @@ public:
         }
     }
     int arrange(int width,bool apply) {
-        const int columns=std::max(3,width/155),cell=width/columns;
-        int top=isFX()?130:92,count=0;
+        const int columns=std::max(BASS_AMBIENT_MOBILE?2:3,width/155),cell=width/columns;
+        int top=BASS_AMBIENT_MOBILE?(isFX()?98:52):(isFX()?130:92),count=0;
         for(size_t k=0;k<controls.size();++k) {
             if(int(k)==generatorStart) {
                 top+=((count+columns-1)/columns)*148;
@@ -256,18 +259,22 @@ public:
     }
     int requiredHeight(int width) { return arrange(width,false); }
     void resized() override {
+#if BASS_AMBIENT_MOBILE
+        description.setVisible(false);
+#else
         description.setBounds(10,0,getWidth()-20,38);
+#endif
         if(!isFX()) {
             int count=index==0?3:4,cell=getWidth()/count;
-            for(int i=0;i<count;++i) {sections[size_t(i)].setBounds(i*cell+3,44,cell-6,36);sections[size_t(i)].setToggleState(i==selectedSection,juce::dontSendNotification);}
+            for(int i=0;i<count;++i) {sections[size_t(i)].setBounds(i*cell+3,BASS_AMBIENT_MOBILE?0:44,cell-6,BASS_AMBIENT_MOBILE?44:36);sections[size_t(i)].setToggleState(i==selectedSection,juce::dontSendNotification);}
         }
         if(isFX()) {
             const int w=getWidth()/6;
             for(int k=0;k<6;++k) {
                 const int x=k*w;
-                modules[size_t(k)].setBounds(x+2,50,w-4,34);
-                left[size_t(k)].setBounds(x+10,88,(w-24)/2,25);
-                right[size_t(k)].setBounds(x+14+(w-24)/2,88,(w-24)/2,25);
+                modules[size_t(k)].setBounds(x+2,BASS_AMBIENT_MOBILE?0:50,w-4,BASS_AMBIENT_MOBILE?44:34);
+                left[size_t(k)].setBounds(x+(BASS_AMBIENT_MOBILE?4:10),BASS_AMBIENT_MOBILE?46:88,(w-(BASS_AMBIENT_MOBILE?12:24))/2,BASS_AMBIENT_MOBILE?44:25);
+                right[size_t(k)].setBounds(x+(BASS_AMBIENT_MOBILE?8:14)+(w-(BASS_AMBIENT_MOBILE?12:24))/2,BASS_AMBIENT_MOBILE?46:88,(w-(BASS_AMBIENT_MOBILE?12:24))/2,BASS_AMBIENT_MOBILE?44:25);
             }
         }
         arrange(getWidth(),true);
@@ -288,7 +295,7 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
     rackSelector.setComponentID("rackSelector");rackSelector.setSelectedId(1,juce::dontSendNotification);
     rackSelector.onChange=[this] { selectedRack=rackSelector.getSelectedId()-1;selectPage(2); };
     addAndMakeVisible(rackSelector);
-    addAndMakeVisible(viewport);viewport.setScrollBarsShown(true,false);viewport.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::never);
+    addAndMakeVisible(viewport);viewport.setScrollBarsShown(true,false);viewport.setScrollOnDragMode(BASS_AMBIENT_MOBILE?juce::Viewport::ScrollOnDragMode::nonHover:juce::Viewport::ScrollOnDragMode::never);
     presets.addItemList({"Italo Analog","Acid Machine","808 Foundation","Lush Flow","Krell Dust","Bass + Atmosphere","Rock Pick Bass","Gothic Bass","Living Landscape","Rhythmic Piano","Krell Laboratory"},1);
     presets.setText("Factory scenes",juce::dontSendNotification);presets.onChange=[this]{processor.applyPreset(presets.getSelectedId()-1);};addAndMakeVisible(presets);
     generate.onClick=[this]{processor.generate(false);};addAndMakeVisible(generate);
@@ -306,8 +313,15 @@ BassAmbientEditor::BassAmbientEditor(BassAmbientProcessor& p):AudioProcessorEdit
     addAndMakeVisible(status);
     status.setColour(juce::Label::textColourId,muted);
     // setResizeLimits may invoke resized(): pages must exist before applying it.
-    setResizable(true,true);setResizeLimits(840,600,1680,1200);
-    setSize(1120,820);selectPage(0);startTimerHz(20);
+#if BASS_AMBIENT_MOBILE
+    for(auto* button:{&generate,&mutate,&undo,&midiExport,&wavExport,&storeScene})button->setVisible(false);
+    for(auto& button:scenes)button.setVisible(false);
+    mobileActions.onClick=[this]{showMobileActions();};addAndMakeVisible(mobileActions);
+    setResizable(false,false);setSize(760,300);
+#else
+    setResizable(true,true);setResizeLimits(840,600,1680,1200);setSize(1120,820);
+#endif
+    selectPage(0);startTimerHz(20);
 }
 BassAmbientEditor::~BassAmbientEditor() { stopTimer();viewport.setViewedComponent(nullptr,false);setLookAndFeel(nullptr); }
 BassAmbientEditor::Page& BassAmbientEditor::currentPage() { return *pages[size_t(selected==2?2+selectedRack:selected)]; }
@@ -317,12 +331,30 @@ void BassAmbientEditor::selectPage(int index) {
     viewport.setViewedComponent(&currentPage(),false);resized();viewport.setViewPosition(0,0);
 }
 void BassAmbientEditor::paint(juce::Graphics& g) {
-    g.fillAll(background);g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
+    g.fillAll(background);
+#if ! BASS_AMBIENT_MOBILE
+    g.setColour(text);g.setFont(juce::Font(juce::FontOptions(22).withStyle("Bold")));
     g.drawText("JERZY / BASS AMBIENT",20,10,300,35,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12)));
     g.drawText(juce::String(JucePlugin_VersionString)+"  |  GENERATIVE INSTRUMENT",22,44,300,20,juce::Justification::centredLeft);
+#endif
 }
 void BassAmbientEditor::resized() {
+#if BASS_AMBIENT_MOBILE
+    const int w=getWidth(),gap=6;
+    int x=4;const int presetWidth=std::max(130,w-462);
+    presets.setBounds(x,2,presetWidth,44);x+=presetWidth+gap;
+    bassPlay.setBounds(x,2,110,44);x+=116;
+    padPlay.setBounds(x,2,140,44);x+=146;
+    panic.setBounds(x,2,76,44);x+=82;mobileActions.setBounds(x,2,std::max(54,w-x-4),44);
+    const int rackWidth=selected==2?168:0,tabWidth=(w-rackWidth)/3;
+    for(int k=0;k<3;++k)tabs[size_t(k)].setBounds(4+k*tabWidth,50,tabWidth-8,44);
+    rackSelector.setBounds(w-164,50,160,44);
+    viewport.setBounds(0,100,w,std::max(1,getHeight()-100));
+    status.setVisible(false);
+    auto& page=currentPage();const int pageWidth=std::max(1,viewport.getWidth()-14);
+    page.setSize(pageWidth,page.requiredHeight(pageWidth));page.resized();
+#else
     int right=getWidth()-20;
     panic.setBounds(right-62,22,62,34);undo.setBounds(right-130,22,62,34);mutate.setBounds(right-214,22,78,34);generate.setBounds(right-310,22,90,34);
     presets.setBounds(330,22,std::max(145,getWidth()-670),34);
@@ -335,6 +367,7 @@ void BassAmbientEditor::resized() {
     viewport.setBounds(16,176,getWidth()-32,getHeight()-220);
     auto& page=currentPage();int w=viewport.getWidth()-18;page.setSize(w,page.requiredHeight(w));page.resized();
     status.setBounds(20,getHeight()-36,getWidth()-40,26);
+#endif
 }
 void BassAmbientEditor::timerCallback() {
     processor.synchroniseLocks();
@@ -350,6 +383,15 @@ void BassAmbientEditor::timerCallback() {
 }
 
 void BassAmbientEditor::exportPerformance(bool midi) {
+#if BASS_AMBIENT_MOBILE
+    auto file=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(
+        "BassAmbient-"+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S")+(midi?".mid":".wav")).getNonexistentSibling();
+    juce::String error;
+    if(!processor.exportCapture(file,midi,error)) {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,"Capture",error);return;
+    }
+    sharing=juce::ContentSharer::shareFilesScoped({juce::URL(file)},[](bool,const juce::String&){},this);
+#else
     chooser=std::make_unique<juce::FileChooser>(midi?"Save last 16 beats as MIDI":"Save last 16 beats as WAV",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(midi?"BassAmbient.mid":"BassAmbient.wav"),midi?"*.mid":"*.wav");
     chooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::warnAboutOverwriting,
         [safe=juce::Component::SafePointer<BassAmbientEditor>(this),midi](const juce::FileChooser& c){
@@ -357,4 +399,25 @@ void BassAmbientEditor::exportPerformance(bool midi) {
             juce::String error;
             if(!safe->processor.exportCapture(file,midi,error))juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,"Capture",error);
         });
+#endif
 }
+
+#if BASS_AMBIENT_MOBILE
+void BassAmbientEditor::showMobileActions() {
+    juce::PopupMenu menu;menu.addItem(1,"Generate");menu.addItem(2,"Mutate");menu.addItem(3,"Undo generation");
+    menu.addSeparator();menu.addItem(4,"Save MIDI / Share");menu.addItem(5,"Save WAV / Share");
+    menu.addSeparator();
+    for(int k=0;k<4;++k)menu.addItem(10+k,"Store scene "+juce::String::charToString(char('A'+k)));
+    for(int k=0;k<4;++k)menu.addItem(20+k,"Recall scene "+juce::String::charToString(char('A'+k)),processor.hasScene(k));
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&mobileActions).withStandardItemHeight(44),
+        [safe=juce::Component::SafePointer<BassAmbientEditor>(this)](int item) {
+            if(!safe)return;
+            if(item==1)safe->processor.generate(false);
+            if(item==2)safe->processor.generate(true);
+            if(item==3)safe->processor.undoGeneration();
+            if(item==4||item==5)safe->exportPerformance(item==4);
+            if(item>=10&&item<14)safe->processor.saveScene(item-10);
+            if(item>=20&&item<24)safe->processor.requestScene(item-20);
+        });
+}
+#endif
