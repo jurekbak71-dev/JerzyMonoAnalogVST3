@@ -16,7 +16,7 @@ public:
         sampleRate = juce::jmax(8000.0, sr);
         const int size = juce::jmax(8192, (int)(sampleRate * 4.1));
         delayL.assign((size_t)size, 0.0f); delayR.assign((size_t)size, 0.0f); chorusL.assign((size_t)juce::jmax(128,(int)(sampleRate*0.05)),0.0f); chorusR.assign(chorusL.size(),0.0f); widthLine.assign((size_t)juce::jmax(64,(int)(sampleRate*0.03)),0.0f);
-        writePos = chorusWritePos = widthPos = 0; compEnvelope = 0.0f; chorusPhase = rotaryPhase = 0.0;
+        writePos = chorusWritePos = widthPos = 0; compEnvelope = 0.0f; chorusPhase = rotaryPhase = 0.0; chorusWetSmoothed = 0.0f; chorusPreviouslyOn = false;
         juce::ignoreUnused(maxBlock);
         reverb.setSampleRate(sampleRate);
         reverb.reset();
@@ -81,6 +81,11 @@ public:
         const int chorusMode=enabled[4]?(int)v("fxChorusMode"):0; const float chorusRate=enabled[4]?juce::jlimit(0.05f,8.0f,v("fxChorusRate")):0.0f;
         const float chorusDepth=enabled[4]?juce::jlimit(0.0f,1.0f,v("fxChorusDepth")):0.0f, chorusMix=enabled[4]?juce::jlimit(0.0f,1.0f,v("fxChorusMix")):0.0f;
         const float chorusFb=enabled[4]?juce::jlimit(-0.85f,0.85f,v("fxChorusFeedback")):0.0f;
+        // Fade wet signal in on activation to avoid playing an old delay buffer abruptly.
+        // Persist the ring while bypassed (no heap allocation on the realtime thread).
+        if(!enabled[4]) {chorusPreviouslyOn=false;chorusWetSmoothed=0.0f;}
+        else if(!chorusPreviouslyOn){chorusWetSmoothed=0.0f;chorusPreviouslyOn=true;}
+        const float chorusWetSlew=(float)(1.0-std::exp(-1.0/(0.018*sampleRate)));
         const float rotaryDepth=enabled[5]?juce::jlimit(0.0f,1.0f,v("fxRotaryDepth")):0.0f;
         const bool rotarySync=enabled[5] && v("fxRotarySync")>0.5f; const int rotaryDiv=enabled[5]?(int)v("fxRotaryDivision"):0;
         const double rotaryHz=!enabled[5]?0.0:rotarySync ? (bpm/60.0)/q[juce::jlimit(0,11,rotaryDiv)] : juce::jlimit(0.1f,8.0f,v("fxRotaryRate"));
@@ -164,8 +169,9 @@ public:
                         const float wetL=read(chorusL,dL),wetR=read(chorusR,dR);
                         chorusL[(size_t)chorusWritePos]=std::tanh(inL+chorusFb*wetL);
                         chorusR[(size_t)chorusWritePos]=std::tanh(inR+chorusFb*wetR);
-                        l[i]=inL*(1.0f-chorusMix)+wetL*chorusMix;
-                        r[i]=inR*(1.0f-chorusMix)+wetR*chorusMix;
+                        chorusWetSmoothed+=(chorusMix-chorusWetSmoothed)*chorusWetSlew;
+                        l[i]=inL*(1.0f-chorusWetSmoothed)+wetL*chorusWetSmoothed;
+                        r[i]=inR*(1.0f-chorusWetSmoothed)+wetR*chorusWetSmoothed;
                         if(++chorusWritePos >= (int)chorusL.size()) chorusWritePos=0;
                         chorusPhase+=chorusRate/sampleRate; if(chorusPhase>=1.0)chorusPhase-=1.0;
                     } break;
@@ -183,7 +189,7 @@ public:
 private:
     static constexpr const char* enabledIds[count]={"fxCompOn","fxDelayOn","fxReverbOn","fxWidthOn","fxChorusOn","fxRotaryOn"};
     double sampleRate=44100.0, chorusPhase=0.0, rotaryPhase=0.0;
-    std::vector<float> delayL,delayR,chorusL,chorusR,widthLine; int writePos=0,chorusWritePos=0,widthPos=0; float compEnvelope=0.0f;
+    std::vector<float> delayL,delayR,chorusL,chorusR,widthLine; int writePos=0,chorusWritePos=0,widthPos=0; float compEnvelope=0.0f; float chorusWetSmoothed=0.0f; bool chorusPreviouslyOn=false;
     std::atomic<uint64_t> orderPacked{0x543210ULL};
     juce::Reverb reverb; juce::Reverb::Parameters reverbParams;
 };
