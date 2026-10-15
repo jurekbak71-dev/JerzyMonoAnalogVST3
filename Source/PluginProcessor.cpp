@@ -276,6 +276,8 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
     // FL Studio may not supply this bus for an Instrument wrapper. The FX plugin
     // is the host-compatible insert for processing mixer audio without Patcher.
     // Accumulate the meter locally: one atomic write per block, not per sample.
+    const int inputChannels=getTotalNumInputChannels();
+    const int outputChannels=getTotalNumOutputChannels();
 
     jerzy::MonoParameters p;
     p.osc1Wave = waveFrom(apvts.getRawParameterValue("osc1Wave")->load());
@@ -464,10 +466,16 @@ void JerzyMonoAnalogAudioProcessor::processBlock(juce::AudioBuffer<float>& b, ju
             if(event.on>=0)arpOnNote(lane,event.on,event.velocity,s,generatedMidi);
         }
 
-        const float inputL=getTotalNumInputChannels()>0?b.getSample(0,s):0;
-        const float inputR=getTotalNumInputChannels()>1?b.getSample(1,s):inputL;
+        // The bus layout is constant for the entire process block. Avoid
+        // querying JUCE's host bus layout on every 4x-oversampled sample.
+        const float inputL=inputChannels>0?b.getSample(0,s):0;
+        const float inputR=inputChannels>1?b.getSample(1,s):inputL;
         const auto y=engine.processStereo();
-        for(int ch=0;ch<getTotalNumOutputChannels();++ch){const float out=(getTotalNumOutputChannels()==1?(y[0]+y[1])*.5f:y[(size_t)ch])+engine.processInput(ch,ch==0?inputL:inputR);b.setSample(ch,s,out);}
+        for(int ch=0;ch<outputChannels;++ch) {
+            const float instrumentSample=(outputChannels==1?(y[0]+y[1])*.5f:y[(size_t)ch]);
+            const float externalSample=engine.processInput(ch,ch==0?inputL:inputR);
+            b.setSample(ch,s,instrumentSample+externalSample);
+        }
     }
     fxChain.process(b,apvts,bpm);
     // Keep meter tied to the post-FX signal while avoiding contention per sample.

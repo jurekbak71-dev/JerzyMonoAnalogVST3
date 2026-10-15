@@ -79,6 +79,7 @@ public:
     void prepare(double fs, uint32_t seed)
     {
         sampleRate = fs;
+        triangleDriftCorrection = 1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 2.0 / sampleRate);
         rng.seed(seed);
         drift.prepare(fs, 0.11 + (seed & 7u) * 0.009, seed ^ 0x9e3779b9u);
         phase = std::uniform_real_distribution<double>(0.0, 1.0)(rng);
@@ -138,7 +139,7 @@ public:
                 triState += 4.0 * dt * sq;
                 // Correct the integrator toward the matching triangle, independently of pitch.
                 const double reference = 1.0 - 4.0 * std::abs(p - 0.5);
-                triState += (1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 2.0 / sampleRate)) * (reference - triState);
+                triState += triangleDriftCorrection * (reference - triState);
                 const double t = juce::jlimit(-1.18, 1.18, triState);
                 y = std::tanh(1.08 * t) / std::tanh(1.08);
                 break;
@@ -189,6 +190,7 @@ private:
     }
 
     double sampleRate = 44100.0;
+    double triangleDriftCorrection = 0.000284913;
     double phase = 0.0, frequency = 110.0, effectiveFrequency = 110.0, pw = 0.5;
     double triState = 0.0, edgeState = 0.0;
     double driftCents = 2.0, keyErrorCents = 0.0;

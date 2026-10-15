@@ -56,5 +56,29 @@ int main(){try{
      }
      check(wetEnergy>1e-5 && peak<2.0f,"Chorus mode emits stable wet signal");
  }
+ // Regression: fast chorus automation and bypass toggling must stay finite.
+ for(int mode=0;mode<3;++mode) {
+     MonoFxChain fx;fx.prepare(48000,512);
+     set(a,"fxChorusOn",1);set(a,"fxChorusMode",(float)mode);
+     set(a,"fxChorusFeedback",.80f);
+     double e=0;float maxDelta=0,previous=0;
+     for(int block=0;block<96;++block) {
+         set(a,"fxChorusOn",block%17==0?0.0f:1.0f);
+         set(a,"fxChorusMix",block%3==0?1.0f:0.35f);
+         set(a,"fxChorusDepth",(block%10)/9.0f);
+         juce::AudioBuffer<float> wave(2,256);
+         for(int i=0;i<256;++i){
+             const float x=.17f*(float)std::sin(juce::MathConstants<double>::twoPi*(220.0*(block*256+i)/48000.0));
+             wave.setSample(0,i,x);wave.setSample(1,i,x);
+         }
+         fx.process(wave,a.apvts,120);
+         for(int i=0;i<256;++i) {
+             const float v=wave.getSample(0,i);
+             check(std::isfinite(v),"Automated Chorus stays finite");
+             maxDelta=juce::jmax(maxDelta,std::abs(v-previous));previous=v;e+=(double)v*v;
+         }
+     }
+     check(e>1 && maxDelta<1.5f,"Chorus automation does not produce runaway samples");
+ }
  std::cout<<"PASS: shared/dual ARP stereo, independent clocks and MIDI pools, note-off, panic, root following, manual root, AUDIO IN bus/stereo, host stop/seek\n";return 0;
 }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}}
