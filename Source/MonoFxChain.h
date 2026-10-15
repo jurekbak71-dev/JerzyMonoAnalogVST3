@@ -64,6 +64,7 @@ public:
             enabled[effect]=v(enabledIds[effect])>=0.5f && (stereo || effect==0);
             anyEnabled|=enabled[effect];
         }
+        if(!enabled[4]) {chorusPreviouslyOn=false;chorusWetSmoothed=0.0f;}
         if(!anyEnabled) return;
         const float threshold=enabled[0]?v("fxCompThreshold"):0.0f, ratio=enabled[0]?juce::jmax(1.0f,v("fxCompRatio")):1.0f;
         const float compAttack=enabled[0]?(float)std::exp(-1.0/(sampleRate*juce::jmax(0.0005f,v("fxCompAttack")))):0.0f;
@@ -83,8 +84,7 @@ public:
         const float chorusFb=enabled[4]?juce::jlimit(-0.85f,0.85f,v("fxChorusFeedback")):0.0f;
         // Fade wet signal in on activation to avoid playing an old delay buffer abruptly.
         // Persist the ring while bypassed (no heap allocation on the realtime thread).
-        if(!enabled[4]) {chorusPreviouslyOn=false;chorusWetSmoothed=0.0f;}
-        else if(!chorusPreviouslyOn){chorusWetSmoothed=0.0f;chorusPreviouslyOn=true;}
+        if(enabled[4] && !chorusPreviouslyOn){chorusWetSmoothed=0.0f;chorusPreviouslyOn=true;}
         const float chorusWetSlew=(float)(1.0-std::exp(-1.0/(0.018*sampleRate)));
         const float rotaryDepth=enabled[5]?juce::jlimit(0.0f,1.0f,v("fxRotaryDepth")):0.0f;
         const bool rotarySync=enabled[5] && v("fxRotarySync")>0.5f; const int rotaryDiv=enabled[5]?(int)v("fxRotaryDivision"):0;
